@@ -1,0 +1,9 @@
+[build]
+  publish = "."
+  command = "echo 'Static deployment - no build step required'"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+

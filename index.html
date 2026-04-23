@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Client Social Media Posting Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/config.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.addEventListener("error", function (event) {
+        var root = document.getElementById("root");
+        if (!root) return;
+        root.innerHTML =
+          '<div style="font-family: ui-sans-serif, system-ui; max-width: 960px; margin: 40px auto; padding: 24px; border: 1px solid #fecaca; background: #fff1f2; color: #881337; border-radius: 24px;">' +
+          "<h1 style='margin:0 0 12px;font-size:24px;'>Runtime Error</h1>" +
+          "<p style='margin:0 0 8px;'><strong>Message:</strong> " + String(event.message || "Unknown error") + "</p>" +
+          "<p style='margin:0 0 8px;'><strong>Source:</strong> " + String(event.filename || "Unknown source") + "</p>" +
+          "<p style='margin:0;'><strong>Line:</strong> " + String(event.lineno || 0) + ":" + String(event.colno || 0) + "</p>" +
+          "</div>";
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="text/babel" src="/src/browser-app.jsx"></script>
+  </body>
+</html>
