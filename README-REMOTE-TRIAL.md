@@ -11,24 +11,28 @@ This tracker now supports two modes:
 2. Open the SQL editor.
 3. Run the SQL in `supabase/schema.sql`.
 
-## 2. Create your team users
+## 2. Add invited team emails
 
 For each trial participant:
 
-1. Add the user in Supabase Authentication.
-2. Copy the user ID.
-3. Insert a matching row in `public.profiles`.
+1. Insert the user's email, name, role, and client scope into `public.access_invites`.
+2. Send the hosted app URL to that person.
+3. When they sign in with the same email, Supabase Auth creates the auth user and the database trigger automatically creates the matching `public.profiles` row.
 
-You can start from `supabase/seed-example.sql` and replace the placeholder UUIDs with the real Auth user IDs.
+You can start from `supabase/seed-example.sql` and replace the placeholder emails with your real trial emails.
 
 Example:
 
 ```sql
-insert into public.profiles (id, full_name, role, client_name)
+insert into public.access_invites (email, full_name, role, client_name)
 values
-  ('USER_UUID_HERE', 'Richard', 'admin', null),
-  ('USER_UUID_HERE', 'Team Lead', 'manager', null),
-  ('USER_UUID_HERE', 'Acme Client Contact', 'client', 'Acme Client');
+  ('rich@example.com', 'Richard', 'admin', null),
+  ('lead@example.com', 'Team Lead', 'manager', null),
+  ('client@example.com', 'Acme Client Contact', 'client', 'Acme Client')
+on conflict (email) do update
+set full_name = excluded.full_name,
+    role = excluded.role,
+    client_name = excluded.client_name;
 ```
 
 ## 3. Configure the app
@@ -80,7 +84,8 @@ For a quick static host, the important thing is that `index.html` and `config.js
 1. Team members open the hosted URL.
 2. They enter their invited email.
 3. The app sends a magic link through Supabase Auth.
-4. After sign-in, the app reads the user's role and client scope from `profiles`.
+4. On first sign-in, the backend auto-creates the user's `profiles` row from `access_invites`.
+5. The app reads the user's role and client scope from `profiles`.
 
 ## 5a. Supabase Auth settings
 
@@ -121,7 +126,7 @@ If `config.js` is empty, the app stays in local demo mode.
 Before sending the link to your team, confirm:
 
 - `schema.sql` has been run
-- `profiles` rows exist for every trial user
+- `access_invites` rows exist for every trial user
 - `config.js` has the real Supabase values
 - Supabase Auth site URL and redirect URL match the hosted URL
 - the hosted page opens and sends a magic link successfully

@@ -597,8 +597,8 @@ function LoginScreen({
             <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
               <h3 className="text-xl font-semibold text-slate-900">Shared Trial Checklist</h3>
               <div className="mt-5 space-y-3 text-sm text-slate-700">
-                <div className="rounded-2xl bg-slate-50 px-4 py-3">1. Create team users in Supabase Auth.</div>
-                <div className="rounded-2xl bg-slate-50 px-4 py-3">2. Create a matching `profiles` row for each user with role and client scope.</div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">1. Add invited team emails with role and client scope.</div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">2. Team members enter their email and receive a magic link.</div>
                 <div className="rounded-2xl bg-slate-50 px-4 py-3">3. Send the hosted URL to the pilot team.</div>
                 <div className="rounded-2xl bg-slate-50 px-4 py-3">4. Monitor activity using the shared logs and timestamps.</div>
               </div>
@@ -1337,18 +1337,35 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       .eq("id", sessionUser.id)
       .single();
 
+    let resolvedProfile = profile;
+
     if (profileError) {
+      const { error: ensureError } = await supabase.rpc("ensure_my_profile");
+      if (!ensureError) {
+        const { data: syncedProfile, error: syncedProfileError } = await supabase
+          .from("profiles")
+          .select("id, full_name, role, client_name")
+          .eq("id", sessionUser.id)
+          .single();
+
+        if (!syncedProfileError) {
+          resolvedProfile = syncedProfile;
+        }
+      }
+    }
+
+    if (!resolvedProfile) {
       setCurrentUser(null);
-      setAuthNotice("Signed in, but no profile row was found. Add this user to the profiles table.");
+      setAuthNotice("This email has not been provisioned for the shared trial yet. Ask an admin to add it to invited access.");
       setSyncState("error");
       return;
     }
 
     setCurrentUser({
-      id: profile.id,
-      name: profile.full_name || sessionUser.email || "Team Member",
-      role: profile.role,
-      clientName: profile.client_name || "",
+      id: resolvedProfile.id,
+      name: resolvedProfile.full_name || sessionUser.email || "Team Member",
+      role: resolvedProfile.role,
+      clientName: resolvedProfile.client_name || "",
       email: sessionUser.email || "",
       mode: "shared",
     });
