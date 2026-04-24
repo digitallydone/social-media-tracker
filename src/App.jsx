@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const APP_TITLE = "Client Social Media Posting Tracker";
 const PLAN_STORAGE_KEY = "client-posting-tracker-plans";
