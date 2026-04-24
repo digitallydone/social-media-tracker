@@ -65,6 +65,8 @@ create or replace function public.get_my_role()
 returns text
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select role from public.profiles where id = auth.uid()
 $$;
@@ -73,6 +75,8 @@ create or replace function public.get_my_client_name()
 returns text
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select client_name from public.profiles where id = auth.uid()
 $$;
@@ -134,3 +138,14 @@ on public.status_records
 for all
 using (public.get_my_role() in ('admin', 'manager'))
 with check (public.get_my_role() in ('admin', 'manager'));
+
+grant usage on schema public to anon, authenticated;
+grant select, insert, update on public.profiles to authenticated;
+grant select, insert, update, delete on public.plans to authenticated;
+grant select, insert, update, delete on public.status_records to authenticated;
+grant select on public.profiles to anon;
+grant select on public.plans to anon;
+grant select on public.status_records to anon;
+grant execute on function public.get_my_role() to anon, authenticated;
+grant execute on function public.get_my_client_name() to anon, authenticated;
+grant execute on function public.set_updated_at() to anon, authenticated;
