@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 const source = readFileSync("src/App.jsx", "utf8")
+  .replace('import React, { useEffect, useMemo, useState } from "react";\n\n', "")
   .replace('import { useEffect, useMemo, useState } from "react";\n\n', "")
   .replace("export default function ClientSocialMediaPostingTrackerInterface()", "function ClientSocialMediaPostingTrackerInterface()");
 

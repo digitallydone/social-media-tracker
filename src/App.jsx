@@ -30,6 +30,7 @@ const CONTENT_FORMAT_OPTIONS = [
 ];
 
 const STATUS_OPTIONS = ["Posted", "Awaiting Approval", "Missed", "Rescheduled"];
+const ACCESS_ROLE_OPTIONS = ["admin", "manager", "client"];
 
 const DEMO_USERS = [
   { id: "admin-1", name: "Richard", role: "admin", clientName: "", mode: "demo" },
@@ -51,6 +52,13 @@ const EMPTY_STATUS_DRAFT = {
   status: "Posted",
   postLink: "",
   notes: "",
+};
+
+const EMPTY_INVITE_FORM = {
+  email: "",
+  fullName: "",
+  role: "manager",
+  clientName: "",
 };
 
 function createId(prefix = "item") {
@@ -517,6 +525,16 @@ function toDbStatus(plan, draft, actorId) {
   };
 }
 
+function mapDbInvite(row) {
+  return {
+    email: row.email || "",
+    fullName: row.full_name || "",
+    role: row.role || "manager",
+    clientName: row.client_name || "",
+    createdAt: row.created_at || "",
+  };
+}
+
 function runSelfChecks() {
   console.assert(normalizeUrl("example.com") === "https://example.com", "normalizeUrl should prepend https");
   console.assert(getMonthKey("2026-05-01").includes("2026"), "getMonthKey should include year");
@@ -746,6 +764,153 @@ function SharedSetupPanel() {
         </div>
         <div className="rounded-2xl bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
           Next file: `README-REMOTE-TRIAL.md`
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccessManagementPanel({
+  inviteForm,
+  onInviteFormChange,
+  onInviteSubmit,
+  onInviteEdit,
+  onInviteDelete,
+  accessInvites,
+  inviteBusy,
+  clientOptions,
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h3 className="text-xl font-semibold text-slate-900">Shared Access Manager</h3>
+          <p className="mt-1 max-w-3xl text-sm text-slate-500">
+            Add the teammates and client contacts who should be allowed into the hosted tracker. Once an email is invited here, that person can use the magic-link sign-in flow without any Supabase access.
+          </p>
+        </div>
+        <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
+          {accessInvites.length} Invited
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(320px,1fr)_minmax(0,1.4fr)]">
+        <form
+          onSubmit={onInviteSubmit}
+          className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-5"
+        >
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">Email</label>
+            <input
+              type="email"
+              value={inviteForm.email}
+              onChange={(event) => onInviteFormChange("email", event.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+              placeholder="teammate@company.com"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">Full Name</label>
+            <input
+              value={inviteForm.fullName}
+              onChange={(event) => onInviteFormChange("fullName", event.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+              placeholder="Team member name"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Role</label>
+              <select
+                value={inviteForm.role}
+                onChange={(event) => onInviteFormChange("role", event.target.value)}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+              >
+                {ACCESS_ROLE_OPTIONS.map((role) => (
+                  <option key={role} value={role}>
+                    {role.charAt(0).toUpperCase() + role.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Client Scope</label>
+              <input
+                value={inviteForm.clientName}
+                onChange={(event) => onInviteFormChange("clientName", event.target.value)}
+                list="tracker-client-suggestions"
+                disabled={inviteForm.role !== "client"}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
+                placeholder={inviteForm.role === "client" ? "Acme Client" : "Only required for client access"}
+              />
+              <datalist id="tracker-client-suggestions">
+                {clientOptions.map((client) => (
+                  <option key={client} value={client} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={inviteBusy}
+            className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {inviteBusy ? "Saving Access..." : "Save Access"}
+          </button>
+        </form>
+
+        <div className="space-y-4">
+          {accessInvites.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+              No invited users yet. Add your pilot team here, then they can sign in with magic links from the hosted app.
+            </div>
+          ) : (
+            accessInvites.map((invite) => (
+              <div key={invite.email} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-2">
+                    <div>
+                      <div className="text-lg font-semibold text-slate-900">{invite.fullName || invite.email}</div>
+                      <div className="text-sm text-slate-500">{invite.email}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                        {invite.role.toUpperCase()}
+                      </span>
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                        {invite.clientName || "All Clients"}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      Invited {invite.createdAt ? new Date(invite.createdAt).toLocaleString() : "recently"}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={inviteBusy}
+                      onClick={() => onInviteEdit(invite)}
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      disabled={inviteBusy}
+                      onClick={() => onInviteDelete(invite.email)}
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -1288,7 +1453,10 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   const [authEmail, setAuthEmail] = useState("");
   const [authNotice, setAuthNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
   const [syncState, setSyncState] = useState("idle");
+  const [accessInvites, setAccessInvites] = useState([]);
+  const [inviteForm, setInviteForm] = useState(EMPTY_INVITE_FORM);
 
   const sharedModeReady = hasSharedConfiguration();
   const supabase = useMemo(() => getSupabaseClient(), [sharedModeReady]);
@@ -1393,14 +1561,31 @@ export default function ClientSocialMediaPostingTrackerInterface() {
         statusQuery = statusQuery.eq("client_name", user.clientName);
       }
 
-      const [{ data: planRows, error: plansError }, { data: statusRows, error: statusError }] =
-        await Promise.all([planQuery, statusQuery]);
+      const remoteRequests = [planQuery, statusQuery];
+
+      if (user.role === "admin") {
+        remoteRequests.push(
+          supabase
+            .from("access_invites")
+            .select("email, full_name, role, client_name, created_at")
+            .order("created_at", { ascending: false })
+        );
+      }
+
+      const remoteResults = await Promise.all(remoteRequests);
+      const [{ data: planRows, error: plansError }, { data: statusRows, error: statusError }, inviteResult] = remoteResults;
 
       if (plansError) throw plansError;
       if (statusError) throw statusError;
 
       setPlans((planRows || []).map(mapDbPlan));
       setStatusRecords((statusRows || []).map(mapDbStatus));
+      if (user.role === "admin") {
+        if (inviteResult?.error) throw inviteResult.error;
+        setAccessInvites((inviteResult?.data || []).map(mapDbInvite));
+      } else {
+        setAccessInvites([]);
+      }
       setSyncState("connected");
     } catch (error) {
       setNotice(error.message || "Unable to sync shared data.");
@@ -1450,6 +1635,12 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   }, [statusRecords, currentUser, selectedClientName]);
 
   const handlePlanChange = (field, value) => setPlanForm((prev) => ({ ...prev, [field]: value }));
+  const handleInviteFormChange = (field, value) =>
+    setInviteForm((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === "role" && value !== "client") next.clientName = "";
+      return next;
+    });
 
   const togglePlanPlatform = (platform) => {
     setPlanForm((prev) => {
@@ -1793,6 +1984,82 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     }
   }
 
+  function handleInviteEdit(invite) {
+    setInviteForm({
+      email: invite.email,
+      fullName: invite.fullName,
+      role: invite.role,
+      clientName: invite.clientName || "",
+    });
+    setNotice(`Editing access for ${invite.email}.`);
+  }
+
+  async function handleInviteSubmit(event) {
+    event.preventDefault();
+    if (!supabase || currentUser?.mode !== "shared" || currentUser?.role !== "admin") return;
+
+    const email = inviteForm.email.trim().toLowerCase();
+    const fullName = inviteForm.fullName.trim();
+    const role = inviteForm.role;
+    const clientName = role === "client" ? inviteForm.clientName.trim() : "";
+
+    if (!email) {
+      setNotice("Add an email before saving access.");
+      return;
+    }
+
+    if (role === "client" && !clientName) {
+      setNotice("Client access requires a client scope.");
+      return;
+    }
+
+    setInviteBusy(true);
+    try {
+      const { error } = await supabase.from("access_invites").upsert(
+        {
+          email,
+          full_name: fullName || null,
+          role,
+          client_name: clientName || null,
+        },
+        { onConflict: "email" }
+      );
+
+      if (error) throw error;
+
+      setInviteForm(EMPTY_INVITE_FORM);
+      setNotice(`Access saved for ${email}.`);
+      await loadRemoteData(currentUser);
+    } catch (error) {
+      setNotice(error.message || "Unable to save access.");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
+  async function handleInviteDelete(email) {
+    if (!supabase || currentUser?.mode !== "shared" || currentUser?.role !== "admin") return;
+    const ok = typeof window === "undefined" ? true : window.confirm(`Remove invited access for ${email}?`);
+    if (!ok) return;
+
+    setInviteBusy(true);
+    try {
+      const { error } = await supabase.from("access_invites").delete().eq("email", email.toLowerCase());
+      if (error) throw error;
+
+      if (inviteForm.email.toLowerCase() === email.toLowerCase()) {
+        setInviteForm(EMPTY_INVITE_FORM);
+      }
+
+      setNotice(`Removed access for ${email}.`);
+      await loadRemoteData(currentUser);
+    } catch (error) {
+      setNotice(error.message || "Unable to remove access.");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
   async function handleLogout() {
     if (sharedModeReady && supabase && currentUser?.mode === "shared") {
       await supabase.auth.signOut();
@@ -1847,6 +2114,18 @@ export default function ClientSocialMediaPostingTrackerInterface() {
         {!sharedModeReady && <SharedSetupPanel />}
         {isClientView && <ClientViewBanner currentUser={currentUser} />}
         <AccessSummary currentUser={currentUser} selectedClientName={selectedClientName} />
+        {!isClientView && sharedModeReady && currentUser.mode === "shared" && currentUser.role === "admin" && (
+          <AccessManagementPanel
+            inviteForm={inviteForm}
+            onInviteFormChange={handleInviteFormChange}
+            onInviteSubmit={handleInviteSubmit}
+            onInviteEdit={handleInviteEdit}
+            onInviteDelete={handleInviteDelete}
+            accessInvites={accessInvites}
+            inviteBusy={inviteBusy}
+            clientOptions={accessibleClientNames}
+          />
+        )}
 
         <div className="space-y-8">
           {!isClientView && canEdit(currentUser) && (
