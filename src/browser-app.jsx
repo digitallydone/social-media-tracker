@@ -2273,10 +2273,14 @@ function ClientSocialMediaPostingTrackerInterface() {
       const overdue = isPlanOverdue(plan, matchingStatus);
       const draft = statusDrafts[getPlanKey(plan)] || null;
       const currentStatus = matchingStatus?.status || (overdue ? "Overdue" : "-");
+      const shouldUseStatusNotes = ["Posted", "Awaiting Approval", "Rescheduled", "Missed"].includes(currentStatus);
       return {
         ...plan,
         currentStatus,
         currentPostLink: matchingStatus?.postLink || "",
+        detailNotes: shouldUseStatusNotes
+          ? (matchingStatus?.notes || plan.notes || "")
+          : (plan.notes || ""),
         draftStatus: draft?.status ?? matchingStatus?.status ?? "",
         draftPostLink: draft?.postLink ?? matchingStatus?.postLink ?? "",
         draftNotes: draft?.notes ?? matchingStatus?.notes ?? "",
