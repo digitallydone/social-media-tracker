@@ -49,7 +49,7 @@ const EMPTY_PLAN_FORM = {
 };
 
 const EMPTY_STATUS_DRAFT = {
-  status: "Posted",
+  status: "",
   postLink: "",
   notes: "",
 };
@@ -1296,6 +1296,46 @@ function CalendarPostDetailsDialog({ post, onClose }) {
   );
 }
 
+function CalendarDayDetailsDialog({ dayLabel, rows, onClose, onSelectRow }) {
+  if (!rows?.length) return null;
+
+  return (
+    <ModalShell
+      title={dayLabel || "Scheduled Posts"}
+      subtitle="Select a post to see its full details."
+      onClose={onClose}
+    >
+      <div className="space-y-3">
+        {rows.map((row) => (
+          <button
+            key={row.id}
+            type="button"
+            onClick={() => onSelectRow?.(row)}
+            className="w-full rounded-3xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-white"
+          >
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">{row.topic || "Planned Post"}</div>
+                <div className="mt-1 text-xs text-slate-500">{row.clientName} | {row.platform}</div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                  {formatTimeLabel(row.time)}
+                </span>
+                {row.currentStatus !== "-" && (
+                  <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(row.currentStatus)}`}>
+                    {row.currentStatus}
+                  </span>
+                )}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </ModalShell>
+  );
+}
+
 function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToToday, onSelectRow, compact = false }) {
   const calendarDays = useMemo(() => getMonthGridDays(monthDate), [monthDate]);
   const monthTitle = monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -1352,7 +1392,9 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-[11px] font-semibold text-slate-800">{row.platform}</span>
-                        <span className="text-[10px] font-medium text-slate-500">{formatTimeLabel(row.time)}</span>
+                        <span className="text-[10px] font-medium text-slate-500">
+                          {row.currentStatus === "-" ? "Planned" : row.currentStatus}
+                        </span>
                       </div>
                     </button>
                   ))}
@@ -1360,7 +1402,13 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
                     <div className="pt-3 text-[10px] font-medium uppercase tracking-wide text-slate-300">No posts</div>
                   )}
                   {dayRows.length > 2 && (
-                    <div className="pt-1 text-[11px] font-semibold text-slate-500">+{dayRows.length - 2} more</div>
+                    <button
+                      type="button"
+                      onClick={() => onSelectRow?.({ __dayOverflow: true, dayLabel: getDayKey(dateKey), rows: dayRows.slice(2) })}
+                      className="pt-1 text-[11px] font-semibold text-slate-500 transition hover:text-slate-700"
+                    >
+                      +{dayRows.length - 2} more
+                    </button>
                   )}
                 </div>
               ) : (
@@ -1380,7 +1428,15 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
                       <div className="mt-1 text-[10px] text-slate-500">{formatTimeLabel(row.time)}</div>
                     </button>
                   ))}
-                  {dayRows.length > 3 && <div className="text-[11px] font-semibold text-slate-500">+{dayRows.length - 3} more</div>}
+                  {dayRows.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => onSelectRow?.({ __dayOverflow: true, dayLabel: getDayKey(dateKey), rows: dayRows.slice(3) })}
+                      className="text-[11px] font-semibold text-slate-500 transition hover:text-slate-700"
+                    >
+                      +{dayRows.length - 3} more
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1466,7 +1522,12 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
                   <td className="px-4 py-4 text-sm text-slate-700">{plan.format || "-"}</td>
                   <td className="px-4 py-4 text-sm text-slate-700">{formatTimeLabel(plan.time)}</td>
                   <td className="px-4 py-4 text-sm">{plan.currentStatus === "-" ? <span className="text-slate-400">-</span> : <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(plan.currentStatus)}`}>{plan.currentStatus}</span>}</td>
-                  <td className="px-4 py-4 text-sm"><select value={plan.draftStatus} onChange={(e) => onDraftChange(planKey, "status", e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs">{STATUS_OPTIONS.map((status) => <option key={status}>{status}</option>)}</select></td>
+                  <td className="px-4 py-4 text-sm">
+                    <select value={plan.draftStatus} onChange={(e) => onDraftChange(planKey, "status", e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs">
+                      <option value="">Select status</option>
+                      {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
+                    </select>
+                  </td>
                   <td className="px-4 py-4 text-sm text-slate-700">
                     <input value={plan.draftPostLink} onChange={(e) => onDraftChange(planKey, "postLink", e.target.value)} placeholder="Paste URL" className="w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" />
                     {plan.currentPostLink && <a href={normalizeUrl(plan.currentPostLink)} target="_blank" rel="noreferrer" className="mt-2 block text-xs font-semibold text-slate-700 underline">Current Link</a>}
@@ -1617,6 +1678,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   const [accessInvites, setAccessInvites] = useState([]);
   const [inviteForm, setInviteForm] = useState(EMPTY_INVITE_FORM);
   const [selectedCalendarPost, setSelectedCalendarPost] = useState(null);
+  const [selectedCalendarOverflow, setSelectedCalendarOverflow] = useState(null);
 
   const sharedModeReady = hasSharedConfiguration();
   const supabase = useMemo(() => getSupabaseClient(), [sharedModeReady]);
@@ -1953,6 +2015,10 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   async function saveDraftToStatusLog(plan) {
     const planKey = getPlanKey(plan);
     const draft = statusDrafts[planKey] || EMPTY_STATUS_DRAFT;
+    if (!draft.status) {
+      setNotice("Select a status before saving the update.");
+      return;
+    }
 
     if (sharedModeReady && currentUser?.mode === "shared" && supabase) {
       setBusy(true);
@@ -2065,7 +2131,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
         ...plan,
         currentStatus,
         currentPostLink: matchingStatus?.postLink || "",
-        draftStatus: draft?.status || matchingStatus?.status || "Posted",
+        draftStatus: draft?.status ?? matchingStatus?.status ?? "",
         draftPostLink: draft?.postLink ?? matchingStatus?.postLink ?? "",
         draftNotes: draft?.notes ?? matchingStatus?.notes ?? "",
       };
@@ -2230,6 +2296,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       setSelectedClientName("All Clients");
       setIsClientView(false);
       setSelectedCalendarPost(null);
+      setSelectedCalendarOverflow(null);
       setNotice("Logged out.");
       return;
     }
@@ -2238,6 +2305,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     setIsClientView(false);
     setSelectedClientName("All Clients");
     setSelectedCalendarPost(null);
+    setSelectedCalendarOverflow(null);
     setNotice("Logged out.");
   }
 
@@ -2330,6 +2398,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                 const next = !isClientView;
                 setIsClientView(next);
                 if (!next) setSelectedCalendarPost(null);
+                setSelectedCalendarOverflow(null);
                 setNotice(next ? "Client view enabled." : "Admin view enabled.");
               }}
             />
@@ -2345,7 +2414,13 @@ export default function ClientSocialMediaPostingTrackerInterface() {
               onPreviousMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
               onNextMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
               onGoToToday={() => setCalendarMonth(new Date())}
-              onSelectRow={setSelectedCalendarPost}
+              onSelectRow={(payload) => {
+                if (payload?.__dayOverflow) {
+                  setSelectedCalendarOverflow(payload);
+                  return;
+                }
+                setSelectedCalendarPost(payload);
+              }}
               compact
             />
             <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />
@@ -2367,6 +2442,15 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       <CalendarPostDetailsDialog
         post={selectedCalendarPost}
         onClose={() => setSelectedCalendarPost(null)}
+      />
+      <CalendarDayDetailsDialog
+        dayLabel={selectedCalendarOverflow?.dayLabel}
+        rows={selectedCalendarOverflow?.rows}
+        onClose={() => setSelectedCalendarOverflow(null)}
+        onSelectRow={(row) => {
+          setSelectedCalendarOverflow(null);
+          setSelectedCalendarPost(row);
+        }}
       />
     </div>
   );
