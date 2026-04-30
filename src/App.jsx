@@ -1276,7 +1276,7 @@ function CalendarPostDetailsDialog({ post, onClose }) {
 
       <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-5">
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Planning Notes</div>
-        <div className="mt-3 text-sm leading-7 text-slate-700">{post.notes || "No planning notes were added."}</div>
+        <div className="mt-3 text-sm leading-7 text-slate-700">{post.detailNotes || "No planning notes were added."}</div>
       </div>
 
       {post.currentStatus === "Posted" && post.currentPostLink && (
@@ -1347,6 +1347,20 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
     });
     return grouped;
   }, [rows]);
+  const mobileDays = useMemo(() => {
+    return calendarDays
+      .filter((day) => day.getMonth() === monthDate.getMonth())
+      .map((day) => ({
+        dateKey: formatDateKey(day),
+        label: day.toLocaleDateString(undefined, {
+          weekday: "long",
+          month: "short",
+          day: "numeric",
+        }),
+        rows: rowsByDate[formatDateKey(day)] || [],
+      }))
+      .filter((item) => item.rows.length > 0);
+  }, [calendarDays, monthDate, rowsByDate]);
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1363,13 +1377,58 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div className="hidden grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
           <div key={day} className="rounded-xl bg-slate-50 px-2 py-3">{day}</div>
         ))}
       </div>
 
-      <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-7">
+      <div className="mt-2 space-y-3 md:hidden">
+        {mobileDays.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+            No posts scheduled for this month yet.
+          </div>
+        ) : (
+          mobileDays.map((day) => (
+            <div key={day.dateKey} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-slate-900">{day.label}</div>
+                <div className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-slate-700">
+                  {day.rows.length} post{day.rows.length === 1 ? "" : "s"}
+                </div>
+              </div>
+              <div className="space-y-2">
+                {day.rows.slice(0, 3).map((row) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    onClick={() => onSelectRow?.(row)}
+                    className="w-full rounded-full border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[11px] font-semibold text-slate-800">{row.platform}</span>
+                      <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${row.currentStatus === "-" ? "border-slate-200 bg-slate-100 text-slate-500" : getStatusStyle(row.currentStatus)}`}>
+                        {row.currentStatus === "-" ? "Planned" : row.currentStatus}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+                {day.rows.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => onSelectRow?.({ __dayOverflow: true, dayLabel: day.label, rows: day.rows.slice(3) })}
+                    className="pt-1 text-[11px] font-semibold text-slate-500 transition hover:text-slate-700"
+                  >
+                    +{day.rows.length - 3} more
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="mt-2 hidden grid-cols-1 gap-2 md:grid md:grid-cols-7">
         {calendarDays.map((day) => {
           const dateKey = formatDateKey(day);
           const dayRows = rowsByDate[dateKey] || [];
@@ -1392,7 +1451,7 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-[11px] font-semibold text-slate-800">{row.platform}</span>
-                        <span className="text-[10px] font-medium text-slate-500">
+                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${row.currentStatus === "-" ? "border-slate-200 bg-slate-100 text-slate-500" : getStatusStyle(row.currentStatus)}`}>
                           {row.currentStatus === "-" ? "Planned" : row.currentStatus}
                         </span>
                       </div>
@@ -1502,7 +1561,65 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
         <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{rows.length} Planned</div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="space-y-4 md:hidden">
+        {rows.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+            No planned log entries yet. Use the planner to create your first post.
+          </div>
+        ) : rows.map((plan) => {
+          const planKey = getPlanKey(plan);
+          return (
+            <div key={plan.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">{plan.topic || "-"}</div>
+                  <div className="mt-1 text-xs text-slate-500">{plan.clientName} | {plan.platform}</div>
+                </div>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                  {formatDateLabel(plan.date)}
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-600">
+                <div><div className="text-xs uppercase tracking-wide text-slate-400">Format</div><div className="mt-1 font-medium text-slate-800">{plan.format || "-"}</div></div>
+                <div><div className="text-xs uppercase tracking-wide text-slate-400">Time</div><div className="mt-1 font-medium text-slate-800">{formatTimeLabel(plan.time)}</div></div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-400">Current Status</div>
+                  <div className="mt-1">
+                    {plan.currentStatus === "-" ? <span className="text-slate-400">-</span> : <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(plan.currentStatus)}`}>{plan.currentStatus}</span>}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-400">Update Status</div>
+                  <select value={plan.draftStatus} onChange={(e) => onDraftChange(planKey, "status", e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs">
+                    <option value="">Select status</option>
+                    {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-400">Post Link</div>
+                  <input value={plan.draftPostLink} onChange={(e) => onDraftChange(planKey, "postLink", e.target.value)} placeholder="Paste URL" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" />
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-400">Update Notes</div>
+                  <textarea value={plan.draftNotes} onChange={(e) => onDraftChange(planKey, "notes", e.target.value)} rows={2} placeholder="Add update notes" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" />
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" disabled={busy} onClick={() => onSaveUpdate(plan)} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">Save Update</button>
+                <button type="button" disabled={busy} onClick={() => onEdit(plan.id)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">Edit</button>
+                <button type="button" disabled={busy} onClick={() => onDelete(plan.id)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">Delete</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto md:block">
         <table className="min-w-full border-separate border-spacing-y-3">
           <thead>
             <tr className="text-left text-sm text-slate-500">
@@ -1560,7 +1677,35 @@ function ExecutionStatusTable({ rows }) {
         </div>
         <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{rows.length} Updates</div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="space-y-4 md:hidden">
+        {rows.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+            No execution updates yet. Saved updates from the planned log will appear here.
+          </div>
+        ) : rows.map((record) => (
+          <div key={record.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">{record.topic || "-"}</div>
+                <div className="mt-1 text-xs text-slate-500">{record.clientName} | {record.platform}</div>
+              </div>
+              <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(record.status)}`}>{record.status}</span>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-600">
+              <div><div className="text-xs uppercase tracking-wide text-slate-400">Date</div><div className="mt-1 font-medium text-slate-800">{formatDateLabel(record.date)}</div></div>
+              <div><div className="text-xs uppercase tracking-wide text-slate-400">Time</div><div className="mt-1 font-medium text-slate-800">{formatTimeLabel(record.time)}</div></div>
+            </div>
+            <div className="mt-4 text-sm text-slate-700">{record.notes || "-"}</div>
+            {record.postLink && (
+              <a href={normalizeUrl(record.postLink)} className="mt-4 inline-flex rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 underline underline-offset-4" target="_blank" rel="noreferrer">
+                View Post
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto md:block">
         <table className="min-w-full border-separate border-spacing-y-3">
           <thead><tr className="text-left text-sm text-slate-500"><th className="px-4">Date</th><th className="px-4">Platform</th><th className="px-4">Topic</th><th className="px-4">Status</th><th className="px-4">Time</th><th className="px-4">Link</th><th className="px-4">Notes</th></tr></thead>
           <tbody>
@@ -1698,6 +1843,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   useEffect(() => {
     if (!currentUser) return;
     if (currentUser.role === "client") {
+      setIsClientView(true);
       setSelectedClientName(currentUser.clientName || "All Clients");
     } else if (!accessibleClientNames.includes(selectedClientName) && selectedClientName !== "All Clients") {
       setSelectedClientName("All Clients");
@@ -2340,10 +2486,10 @@ export default function ClientSocialMediaPostingTrackerInterface() {
           onLogout={handleLogout}
         />
         <AppNotice message={notice} />
-        <ModeBanner currentUser={currentUser} sharedModeReady={sharedModeReady} syncState={syncState} />
+        {!isClientView && <ModeBanner currentUser={currentUser} sharedModeReady={sharedModeReady} syncState={syncState} />}
         {!sharedModeReady && <SharedSetupPanel />}
         {isClientView && <ClientViewBanner currentUser={currentUser} />}
-        <AccessSummary currentUser={currentUser} selectedClientName={selectedClientName} />
+        {!isClientView && <AccessSummary currentUser={currentUser} selectedClientName={selectedClientName} />}
         {!isClientView && sharedModeReady && currentUser.mode === "shared" && currentUser.role === "admin" && (
           <AccessManagementPanel
             inviteForm={inviteForm}
@@ -2387,21 +2533,23 @@ export default function ClientSocialMediaPostingTrackerInterface() {
           )}
 
           <div className="space-y-8">
-            <DeploymentTools
-              onExport={handleExportBackup}
-              onImport={handleImportBackup}
-              onResetData={handleResetData}
-              hasData={plans.length > 0 || statusRecords.length > 0}
-              isClientView={isClientView}
-              sharedModeReady={sharedModeReady}
-              onToggleClientView={() => {
-                const next = !isClientView;
-                setIsClientView(next);
-                if (!next) setSelectedCalendarPost(null);
-                setSelectedCalendarOverflow(null);
-                setNotice(next ? "Client view enabled." : "Admin view enabled.");
-              }}
-            />
+            {canEdit(currentUser) && (
+              <DeploymentTools
+                onExport={handleExportBackup}
+                onImport={handleImportBackup}
+                onResetData={handleResetData}
+                hasData={plans.length > 0 || statusRecords.length > 0}
+                isClientView={isClientView}
+                sharedModeReady={sharedModeReady}
+                onToggleClientView={() => {
+                  const next = !isClientView;
+                  setIsClientView(next);
+                  if (!next) setSelectedCalendarPost(null);
+                  setSelectedCalendarOverflow(null);
+                  setNotice(next ? "Client view enabled." : "Admin view enabled.");
+                }}
+              />
+            )}
             {isClientView && <StatCards stats={stats} />}
             {!isClientView && canEdit(currentUser) && (
               <PlannedContentTable rows={mergedPlanRows} onDraftChange={updateDraft} onSaveUpdate={saveDraftToStatusLog} onEdit={handleEditPlan} onDelete={handleDeletePlan} busy={busy} />
