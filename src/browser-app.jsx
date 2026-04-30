@@ -1014,12 +1014,21 @@ function PlannedEntryForm({
   onSubmit,
   onCancel,
   busy,
+  mode = "create",
+  title,
+  description,
 }) {
+  const isEditMode = mode === "edit";
+
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="mb-5">
-        <h2 className="text-2xl font-semibold text-slate-900">Planned Content Entry</h2>
-        <p className="mt-1 text-sm text-slate-500">Use this entry panel to create the content schedule your remote team will execute against.</p>
+        <h2 className="text-2xl font-semibold text-slate-900">{title || (isEditMode ? "Edit Planned Entry" : "Planned Content Entry")}</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          {description || (isEditMode
+            ? "Update the selected planned entry here, then save and return straight to the planned log."
+            : "Use this entry panel to create the content schedule your remote team will execute against.")}
+        </p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
@@ -1131,9 +1140,9 @@ function PlannedEntryForm({
             disabled={busy}
             className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {busy ? "Saving..." : editingPlanId !== null ? "Update Planned Entry" : "Save Planned Entry"}
+            {busy ? "Saving..." : isEditMode || editingPlanId !== null ? "Update Planned Entry" : "Save Planned Entry"}
           </button>
-          {editingPlanId !== null && (
+          {isEditMode && (
             <button
               type="button"
               onClick={onCancel}
@@ -1145,6 +1154,42 @@ function PlannedEntryForm({
         </div>
       </form>
     </div>
+  );
+}
+
+function EditPlanDialog({
+  open,
+  planForm,
+  editingPlanId,
+  onPlanChange,
+  onTogglePlatform,
+  onPlatformFormatChange,
+  onPlatformTimeChange,
+  onSubmit,
+  onCancel,
+  busy,
+}) {
+  if (!open) return null;
+
+  return (
+    <ModalShell
+      title="Edit Planned Entry"
+      subtitle="Make your changes here without leaving the planned log."
+      onClose={onCancel}
+    >
+      <PlannedEntryForm
+        planForm={planForm}
+        editingPlanId={editingPlanId}
+        onPlanChange={onPlanChange}
+        onTogglePlatform={onTogglePlatform}
+        onPlatformFormatChange={onPlatformFormatChange}
+        onPlatformTimeChange={onPlatformTimeChange}
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+        busy={busy}
+        mode="edit"
+      />
+    </ModalShell>
   );
 }
 
@@ -1166,7 +1211,92 @@ function StatusGuide() {
   );
 }
 
-function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToToday }) {
+function ModalShell({ title, subtitle, onClose, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white/95 px-6 py-5 backdrop-blur">
+          <div>
+            <h3 className="text-2xl font-semibold text-slate-900">{title}</h3>
+            {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+          >
+            Close
+          </button>
+        </div>
+        <div className="p-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarPostDetailsDialog({ post, onClose }) {
+  if (!post) return null;
+
+  return (
+    <ModalShell
+      title={post.topic || "Planned Post"}
+      subtitle="Planned content details from the shared tracker"
+      onClose={onClose}
+    >
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Client</div>
+          <div className="mt-2 text-lg font-semibold text-slate-900">{post.clientName || "-"}</div>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Platform</div>
+          <div className="mt-2 text-lg font-semibold text-slate-900">{post.platform || "-"}</div>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Date</div>
+          <div className="mt-2 text-lg font-semibold text-slate-900">{formatDateLabel(post.date)}</div>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Time</div>
+          <div className="mt-2 text-lg font-semibold text-slate-900">{formatTimeLabel(post.time)}</div>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Format</div>
+          <div className="mt-2 text-lg font-semibold text-slate-900">{post.format || "-"}</div>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Status</div>
+          <div className="mt-2">
+            {post.currentStatus === "-"
+              ? <span className="text-sm font-medium text-slate-500">Not Updated</span>
+              : <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(post.currentStatus)}`}>{post.currentStatus}</span>}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-5">
+        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Planning Notes</div>
+        <div className="mt-3 text-sm leading-7 text-slate-700">{post.notes || "No planning notes were added."}</div>
+      </div>
+
+      {post.currentStatus === "Posted" && post.currentPostLink && (
+        <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Published Link</div>
+          <a
+            href={normalizeUrl(post.currentPostLink)}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white"
+          >
+            View Post
+          </a>
+        </div>
+      )}
+    </ModalShell>
+  );
+}
+
+function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToToday, onSelectRow, compact = false }) {
   const calendarDays = useMemo(() => getMonthGridDays(monthDate), [monthDate]);
   const monthTitle = monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const rowsByDate = useMemo(() => {
@@ -1211,19 +1341,48 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
                 <span className={`text-sm font-semibold ${isCurrentMonth ? "text-slate-900" : "text-slate-400"}`}>{day.getDate()}</span>
                 {dayRows.length > 0 && <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700">{dayRows.length}</span>}
               </div>
-              <div className="space-y-2">
-                {dayRows.slice(0, 3).map((row) => (
-                  <div key={row.id} className="rounded-xl bg-slate-50 p-2 text-left">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-semibold text-slate-900">{row.platform}</span>
-                      {row.currentStatus !== "-" && <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getStatusStyle(row.currentStatus)}`}>{row.currentStatus}</span>}
-                    </div>
-                    <div className="mt-1 line-clamp-2 text-[11px] text-slate-700">{row.topic}</div>
-                    <div className="mt-1 text-[10px] text-slate-500">{formatTimeLabel(row.time)}</div>
-                  </div>
-                ))}
-                {dayRows.length > 3 && <div className="text-[11px] font-semibold text-slate-500">+{dayRows.length - 3} more</div>}
-              </div>
+              {compact ? (
+                <div className="space-y-2">
+                  {dayRows.slice(0, 2).map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => onSelectRow?.(row)}
+                      className="w-full rounded-full border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-[11px] font-semibold text-slate-800">{row.platform}</span>
+                        <span className="text-[10px] font-medium text-slate-500">{formatTimeLabel(row.time)}</span>
+                      </div>
+                    </button>
+                  ))}
+                  {dayRows.length === 0 && (
+                    <div className="pt-3 text-[10px] font-medium uppercase tracking-wide text-slate-300">No posts</div>
+                  )}
+                  {dayRows.length > 2 && (
+                    <div className="pt-1 text-[11px] font-semibold text-slate-500">+{dayRows.length - 2} more</div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {dayRows.slice(0, 3).map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => onSelectRow?.(row)}
+                      className={`w-full rounded-xl bg-slate-50 p-2 text-left ${onSelectRow ? "transition hover:bg-slate-100" : ""}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold text-slate-900">{row.platform}</span>
+                        {row.currentStatus !== "-" && <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getStatusStyle(row.currentStatus)}`}>{row.currentStatus}</span>}
+                      </div>
+                      <div className="mt-1 line-clamp-2 text-[11px] text-slate-700">{row.topic}</div>
+                      <div className="mt-1 text-[10px] text-slate-500">{formatTimeLabel(row.time)}</div>
+                    </button>
+                  ))}
+                  {dayRows.length > 3 && <div className="text-[11px] font-semibold text-slate-500">+{dayRows.length - 3} more</div>}
+                </div>
+              )}
             </div>
           );
         })}
@@ -1457,6 +1616,7 @@ function ClientSocialMediaPostingTrackerInterface() {
   const [syncState, setSyncState] = useState("idle");
   const [accessInvites, setAccessInvites] = useState([]);
   const [inviteForm, setInviteForm] = useState(EMPTY_INVITE_FORM);
+  const [selectedCalendarPost, setSelectedCalendarPost] = useState(null);
 
   const sharedModeReady = hasSharedConfiguration();
   const supabase = useMemo(() => getSupabaseClient(), [sharedModeReady]);
@@ -1745,7 +1905,7 @@ function ClientSocialMediaPostingTrackerInterface() {
       notes: plan.notes,
     });
     setEditingPlanId(planId);
-    setNotice("Editing planned entry.");
+    setNotice("Edit dialog opened.");
   }
 
   async function handleDeletePlan(planId) {
@@ -2069,6 +2229,7 @@ function ClientSocialMediaPostingTrackerInterface() {
       setStatusDrafts({});
       setSelectedClientName("All Clients");
       setIsClientView(false);
+      setSelectedCalendarPost(null);
       setNotice("Logged out.");
       return;
     }
@@ -2076,6 +2237,7 @@ function ClientSocialMediaPostingTrackerInterface() {
     setCurrentUser(null);
     setIsClientView(false);
     setSelectedClientName("All Clients");
+    setSelectedCalendarPost(null);
     setNotice("Logged out.");
   }
 
@@ -2130,9 +2292,10 @@ function ClientSocialMediaPostingTrackerInterface() {
         <div className="space-y-8">
           {!isClientView && canEdit(currentUser) && (
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Planned Posts</div><p className="mt-1 text-sm text-slate-600">Frontend read-only view of all planned content already entered into the system.</p></div>
-                <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Planned Log</div><p className="mt-1 text-sm text-slate-600">This is the backend ledger where every saved planned item is stored, reviewed, edited and later matched with execution updates.</p></div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Planned Content Entry</div><p className="mt-1 text-sm text-slate-600">Create the content schedule your team will execute against.</p></div>
+                <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Planned Log</div><p className="mt-1 text-sm text-slate-600">Review, edit, and update each planned row directly from the backend log.</p></div>
+                <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Execution Status Log</div><p className="mt-1 text-sm text-slate-600">Track saved outcomes and keep reporting aligned to posted activity.</p></div>
               </div>
             </div>
           )}
@@ -2149,6 +2312,7 @@ function ClientSocialMediaPostingTrackerInterface() {
                 onSubmit={handlePlanSubmit}
                 onCancel={handleCancelPlanEdit}
                 busy={busy}
+                mode="create"
               />
               <StatusGuide />
             </div>
@@ -2165,26 +2329,45 @@ function ClientSocialMediaPostingTrackerInterface() {
               onToggleClientView={() => {
                 const next = !isClientView;
                 setIsClientView(next);
+                if (!next) setSelectedCalendarPost(null);
                 setNotice(next ? "Client view enabled." : "Admin view enabled.");
               }}
             />
-            <StatCards stats={stats} />
+            {isClientView && <StatCards stats={stats} />}
+            {!isClientView && canEdit(currentUser) && (
+              <PlannedContentTable rows={mergedPlanRows} onDraftChange={updateDraft} onSaveUpdate={saveDraftToStatusLog} onEdit={handleEditPlan} onDelete={handleDeletePlan} busy={busy} />
+            )}
+            {!isClientView && <ExecutionStatusTable rows={summaryStatusRecords} />}
+            {!isClientView && <StatCards stats={stats} />}
             <CalendarView
               rows={mergedPlanRows}
               monthDate={calendarMonth}
               onPreviousMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
               onNextMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
               onGoToToday={() => setCalendarMonth(new Date())}
+              onSelectRow={setSelectedCalendarPost}
+              compact
             />
-            <PlannedPostsPanel rows={mergedPlanRows} />
-            {!isClientView && canEdit(currentUser) && (
-              <PlannedContentTable rows={mergedPlanRows} onDraftChange={updateDraft} onSaveUpdate={saveDraftToStatusLog} onEdit={handleEditPlan} onDelete={handleDeletePlan} busy={busy} />
-            )}
-            <ExecutionStatusTable rows={summaryStatusRecords} />
             <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />
           </div>
         </div>
       </div>
+      <EditPlanDialog
+        open={!isClientView && canEdit(currentUser) && editingPlanId !== null}
+        planForm={planForm}
+        editingPlanId={editingPlanId}
+        onPlanChange={handlePlanChange}
+        onTogglePlatform={togglePlanPlatform}
+        onPlatformFormatChange={handlePlatformFormatChange}
+        onPlatformTimeChange={handlePlatformTimeChange}
+        onSubmit={handlePlanSubmit}
+        onCancel={handleCancelPlanEdit}
+        busy={busy}
+      />
+      <CalendarPostDetailsDialog
+        post={selectedCalendarPost}
+        onClose={() => setSelectedCalendarPost(null)}
+      />
     </div>
   );
 }
