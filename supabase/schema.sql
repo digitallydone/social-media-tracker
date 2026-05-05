@@ -168,21 +168,24 @@ set search_path = public
 as $$
 declare
   existing_profile public.profiles;
+  synced_profile public.profiles;
 begin
   select *
   into existing_profile
   from public.profiles
   where id = auth.uid();
 
-  if found then
-    return existing_profile;
-  end if;
-
-  return public.sync_profile_from_invite(
+  synced_profile := public.sync_profile_from_invite(
     auth.uid(),
     lower(coalesce(auth.jwt()->>'email', '')),
-    nullif(auth.jwt()->>'email', '')
+    coalesce(existing_profile.full_name, nullif(auth.jwt()->>'email', ''))
   );
+
+  if synced_profile is not null then
+    return synced_profile;
+  end if;
+
+  return existing_profile;
 end;
 $$;
 

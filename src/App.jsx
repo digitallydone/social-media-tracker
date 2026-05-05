@@ -1737,10 +1737,10 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
   );
 }
 
-function PerformanceDashboard({ rows, monthDate, isClientView = false }) {
+function PerformanceDashboard({ rows, records, monthDate, isClientView = false }) {
   const postedRows = useMemo(
-    () => rows.filter((row) => row.currentStatus === "Posted" && hasPerformanceMetrics(row)),
-    [rows]
+    () => records.filter((row) => row.status === "Posted" && hasPerformanceMetrics(row)),
+    [records]
   );
 
   const totals = useMemo(() => {
@@ -1789,8 +1789,8 @@ function PerformanceDashboard({ rows, monthDate, isClientView = false }) {
 
   const monthLabel = formatMonthLabel(monthDate);
   const postedRowsWithAnyMetrics = useMemo(
-    () => rows.filter((row) => row.currentStatus === "Posted"),
-    [rows]
+    () => records.filter((row) => row.status === "Posted"),
+    [records]
   );
 
   return (
@@ -2701,30 +2701,21 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       return;
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { error: ensureError } = await supabase.rpc("ensure_my_profile");
+    if (ensureError) {
+      setCurrentUser(null);
+      setAuthNotice(ensureError.message || "Unable to load your access profile.");
+      setSyncState("error");
+      return;
+    }
+
+    const { data: resolvedProfile, error: profileError } = await supabase
       .from("profiles")
       .select("id, full_name, role, client_name")
       .eq("id", sessionUser.id)
       .single();
 
-    let resolvedProfile = profile;
-
-    if (profileError) {
-      const { error: ensureError } = await supabase.rpc("ensure_my_profile");
-      if (!ensureError) {
-        const { data: syncedProfile, error: syncedProfileError } = await supabase
-          .from("profiles")
-          .select("id, full_name, role, client_name")
-          .eq("id", sessionUser.id)
-          .single();
-
-        if (!syncedProfileError) {
-          resolvedProfile = syncedProfile;
-        }
-      }
-    }
-
-    if (!resolvedProfile) {
+    if (profileError || !resolvedProfile) {
       setCurrentUser(null);
       setAuthNotice("This email has not been provisioned for the shared trial yet. Ask an admin to add it to invited access.");
       setSyncState("error");
@@ -3475,7 +3466,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
             )}
             {isClientView && (
               <>
-                <PerformanceDashboard rows={mergedPlanRows} monthDate={activeDataMonth} isClientView />
+                <PerformanceDashboard rows={mergedPlanRows} records={monthFilteredStatusRecords} monthDate={activeDataMonth} isClientView />
                 <StatCards stats={stats} />
                 <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />
                 <MonthScopeControls
@@ -3492,7 +3483,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
             )}
             {!isClientView && <ExecutionStatusTable rows={summaryStatusRecords} />}
             {!isClientView && <StatCards stats={stats} />}
-            {!isClientView && <PerformanceDashboard rows={mergedPlanRows} monthDate={activeDataMonth} />}
+            {!isClientView && <PerformanceDashboard rows={mergedPlanRows} records={monthFilteredStatusRecords} monthDate={activeDataMonth} />}
             <CalendarView
               rows={mergedPlanRows}
               monthDate={calendarMonth}
