@@ -291,6 +291,52 @@ function getMonthKey(date) {
   });
 }
 
+function getMonthStart(value = new Date()) {
+  return new Date(value.getFullYear(), value.getMonth(), 1);
+}
+
+function shiftMonth(date, offset) {
+  return new Date(date.getFullYear(), date.getMonth() + offset, 1);
+}
+
+function getMonthInputValue(date) {
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}`;
+}
+
+function parseMonthInputValue(value) {
+  const [year, month] = value.split("-").map(Number);
+  if (!year || !month) return null;
+  return new Date(year, month - 1, 1);
+}
+
+function isSameMonth(dateValue, monthDate) {
+  if (!dateValue) return false;
+  const parsed = new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return (
+    parsed.getFullYear() === monthDate.getFullYear() &&
+    parsed.getMonth() === monthDate.getMonth()
+  );
+}
+
+function formatMonthLabel(date) {
+  return date.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function getDefaultPlanDate(monthDate) {
+  const now = new Date();
+  if (
+    now.getFullYear() === monthDate.getFullYear() &&
+    now.getMonth() === monthDate.getMonth()
+  ) {
+    return formatDateKey(now);
+  }
+  return formatDateKey(monthDate);
+}
+
 function createPlatformBucket(platform) {
   return {
     platform,
@@ -1000,6 +1046,36 @@ function StatCards({ stats }) {
           <h2 className="mt-2 text-3xl font-bold text-slate-900">{stat.value}</h2>
         </div>
       ))}
+    </div>
+  );
+}
+
+function MonthScopeControls({ monthDate, onChangeMonth, onPreviousMonth, onNextMonth, onGoToCurrentMonth }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">Reporting Month</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-900">{formatMonthLabel(monthDate)}</div>
+          <p className="mt-2 text-sm text-slate-500">
+            Planned content, execution log, stats, and reporting now follow this active month by default.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev Month</button>
+          <input
+            type="month"
+            value={getMonthInputValue(monthDate)}
+            onChange={(event) => {
+              const next = parseMonthInputValue(event.target.value);
+              if (next) onChangeMonth(next);
+            }}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+          />
+          <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next Month</button>
+          <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Current Month</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1796,10 +1872,11 @@ function SnapshotPanel({ snapshotView, onToggle, activeSummary }) {
 }
 
 function ClientSocialMediaPostingTrackerInterface() {
+  const initialDataMonth = getMonthStart(new Date());
   const [planForm, setPlanForm] = useState({
     ...EMPTY_PLAN_FORM,
     clientName: "Acme Client",
-    date: "2026-05-05",
+    date: getDefaultPlanDate(initialDataMonth),
     topic: "Campaign Reminder",
     platforms: ["Instagram", "Facebook"],
     platformFormats: { Instagram: "Carousel", Facebook: "Graphic" },
@@ -1813,6 +1890,7 @@ function ClientSocialMediaPostingTrackerInterface() {
   const [notice, setNotice] = useState("Ready for deployment.");
   const [isClientView, setIsClientView] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [activeDataMonth, setActiveDataMonth] = useState(initialDataMonth);
   const [currentUser, setCurrentUser] = useState(() => readStoredObject(SESSION_STORAGE_KEY, null));
   const [selectedClientName, setSelectedClientName] = useState("All Clients");
   const [authEmail, setAuthEmail] = useState("");
@@ -2002,6 +2080,14 @@ function ClientSocialMediaPostingTrackerInterface() {
     return statusRecords.filter((record) => record.clientName === selectedClientName);
   }, [statusRecords, currentUser, selectedClientName]);
 
+  const monthFilteredPlans = useMemo(() => {
+    return filteredPlans.filter((plan) => isSameMonth(plan.date, activeDataMonth));
+  }, [filteredPlans, activeDataMonth]);
+
+  const monthFilteredStatusRecords = useMemo(() => {
+    return filteredStatusRecords.filter((record) => isSameMonth(record.date, activeDataMonth));
+  }, [filteredStatusRecords, activeDataMonth]);
+
   const handlePlanChange = (field, value) => setPlanForm((prev) => ({ ...prev, [field]: value }));
   const handleInviteFormChange = (field, value) =>
     setInviteForm((prev) => {
@@ -2038,8 +2124,26 @@ function ClientSocialMediaPostingTrackerInterface() {
   const handlePlatformFormatChange = (platform, value) => setPlanForm((prev) => ({ ...prev, platformFormats: { ...prev.platformFormats, [platform]: value } }));
 
   const resetPlanForm = (clientName = "") => {
-    setPlanForm({ ...EMPTY_PLAN_FORM, clientName, platforms: ["Instagram"], platformFormats: { Instagram: "" }, platformTimes: { Instagram: "" } });
+    setPlanForm({
+      ...EMPTY_PLAN_FORM,
+      clientName,
+      date: getDefaultPlanDate(activeDataMonth),
+      platforms: ["Instagram"],
+      platformFormats: { Instagram: "" },
+      platformTimes: { Instagram: "" },
+    });
   };
+
+  useEffect(() => {
+    if (editingPlanId !== null) return;
+    setPlanForm((prev) => {
+      if (prev.date && isSameMonth(prev.date, activeDataMonth)) return prev;
+      return {
+        ...prev,
+        date: getDefaultPlanDate(activeDataMonth),
+      };
+    });
+  }, [activeDataMonth, editingPlanId]);
 
   async function handlePlanSubmit(event) {
     event.preventDefault();
@@ -2268,8 +2372,8 @@ function ClientSocialMediaPostingTrackerInterface() {
   }, [statusRecords, sharedModeReady]);
 
   const mergedPlanRows = useMemo(() => {
-    return filteredPlans.map((plan) => {
-      const matchingStatus = filteredStatusRecords.find((item) => item.planId === plan.id);
+    return monthFilteredPlans.map((plan) => {
+      const matchingStatus = monthFilteredStatusRecords.find((item) => item.planId === plan.id);
       const overdue = isPlanOverdue(plan, matchingStatus);
       const draft = statusDrafts[getPlanKey(plan)] || null;
       const currentStatus = matchingStatus?.status || (overdue ? "Overdue" : "-");
@@ -2286,10 +2390,10 @@ function ClientSocialMediaPostingTrackerInterface() {
         draftNotes: draft?.notes ?? matchingStatus?.notes ?? "",
       };
     });
-  }, [filteredPlans, filteredStatusRecords, statusDrafts]);
+  }, [monthFilteredPlans, monthFilteredStatusRecords, statusDrafts, activeDataMonth]);
 
   const summaryStatusRecords = useMemo(() => {
-    const base = [...filteredStatusRecords];
+    const base = [...monthFilteredStatusRecords];
     mergedPlanRows.forEach((plan) => {
       if (plan.currentStatus === "Overdue" && !base.some((item) => item.planId === plan.id)) {
         base.push(withStatusId({
@@ -2307,15 +2411,15 @@ function ClientSocialMediaPostingTrackerInterface() {
       }
     });
     return base;
-  }, [mergedPlanRows, filteredStatusRecords]);
+  }, [mergedPlanRows, monthFilteredStatusRecords]);
 
   const overallExecutionScore = useMemo(
-    () => calculateExecutionScore(filteredPlans.length, mergedPlanRows.filter((item) => item.currentStatus === "Posted").length),
-    [filteredPlans.length, mergedPlanRows]
+    () => calculateExecutionScore(monthFilteredPlans.length, mergedPlanRows.filter((item) => item.currentStatus === "Posted").length),
+    [monthFilteredPlans.length, mergedPlanRows]
   );
 
   const stats = useMemo(() => {
-    const counts = { planned: filteredPlans.length, posted: 0, pending: 0, missed: 0, rescheduled: 0, overdue: 0 };
+    const counts = { planned: monthFilteredPlans.length, posted: 0, pending: 0, missed: 0, rescheduled: 0, overdue: 0 };
     mergedPlanRows.forEach((record) => {
       if (record.currentStatus === "Posted") counts.posted += 1;
       if (record.currentStatus === "Awaiting Approval") counts.pending += 1;
@@ -2332,11 +2436,11 @@ function ClientSocialMediaPostingTrackerInterface() {
       { label: "Overdue", value: counts.overdue },
       { label: "Score", value: `${overallExecutionScore}%` },
     ];
-  }, [filteredPlans, mergedPlanRows, overallExecutionScore]);
+  }, [monthFilteredPlans, mergedPlanRows, overallExecutionScore]);
 
-  const dailySummary = useMemo(() => buildPeriodSummary(filteredPlans, summaryStatusRecords, getDayKey), [filteredPlans, summaryStatusRecords]);
-  const weeklySummary = useMemo(() => buildPeriodSummary(filteredPlans, summaryStatusRecords, getWeekKey), [filteredPlans, summaryStatusRecords]);
-  const monthlySummary = useMemo(() => buildPeriodSummary(filteredPlans, summaryStatusRecords, getMonthKey), [filteredPlans, summaryStatusRecords]);
+  const dailySummary = useMemo(() => buildPeriodSummary(monthFilteredPlans, summaryStatusRecords, getDayKey), [monthFilteredPlans, summaryStatusRecords]);
+  const weeklySummary = useMemo(() => buildPeriodSummary(monthFilteredPlans, summaryStatusRecords, getWeekKey), [monthFilteredPlans, summaryStatusRecords]);
+  const monthlySummary = useMemo(() => buildPeriodSummary(monthFilteredPlans, summaryStatusRecords, getMonthKey), [monthFilteredPlans, summaryStatusRecords]);
   const activeSummary = snapshotView === "daily" ? dailySummary : snapshotView === "weekly" ? weeklySummary : monthlySummary;
 
   async function requestMagicLink() {
@@ -2554,6 +2658,13 @@ function ClientSocialMediaPostingTrackerInterface() {
                 }}
               />
             )}
+            <MonthScopeControls
+              monthDate={activeDataMonth}
+              onChangeMonth={setActiveDataMonth}
+              onPreviousMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, -1))}
+              onNextMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, 1))}
+              onGoToCurrentMonth={() => setActiveDataMonth(getMonthStart(new Date()))}
+            />
             {isClientView && <StatCards stats={stats} />}
             {!isClientView && canEdit(currentUser) && (
               <PlannedContentTable rows={mergedPlanRows} onDraftChange={updateDraft} onSaveUpdate={saveDraftToStatusLog} onEdit={handleEditPlan} onDelete={handleDeletePlan} busy={busy} />
