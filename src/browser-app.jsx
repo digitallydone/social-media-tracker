@@ -1737,7 +1737,17 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
   );
 }
 
-function PerformanceDashboard({ rows, records, allRecords = [], monthDate, isClientView = false }) {
+function PerformanceDashboard({
+  rows,
+  records,
+  allRecords = [],
+  monthDate,
+  isClientView = false,
+  onChangeMonth,
+  onPreviousMonth,
+  onNextMonth,
+  onGoToCurrentMonth,
+}) {
   const monthScopedRecords = useMemo(
     () => records.filter((row) => isSameMonth(row.date, monthDate)),
     [records, monthDate]
@@ -1838,6 +1848,32 @@ function PerformanceDashboard({ rows, records, allRecords = [], monthDate, isCli
         </div>
         <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
           {postedRows.length} posted item{postedRows.length === 1 ? "" : "s"} with metrics
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Performance Month</div>
+            <div className="mt-2 text-lg font-semibold text-slate-900">{monthLabel}</div>
+            <p className="mt-1 text-sm text-slate-500">
+              Switch months here to review past or upcoming performance without leaving the dashboard.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev Month</button>
+            <input
+              type="month"
+              value={getMonthInputValue(monthDate)}
+              onChange={(event) => {
+                const next = parseMonthInputValue(event.target.value);
+                if (next) onChangeMonth?.(next);
+              }}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+            />
+            <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next Month</button>
+            <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Current Month</button>
+          </div>
         </div>
       </div>
 
@@ -3516,8 +3552,45 @@ function ClientSocialMediaPostingTrackerInterface() {
                 }}
               />
             )}
+            {isClientView && (
+              <>
+                <PerformanceDashboard
+                  rows={mergedPlanRows}
+                  records={monthFilteredStatusRecords}
+                  allRecords={filteredStatusRecords}
+                  monthDate={activeDataMonth}
+                  isClientView
+                  onChangeMonth={(value) => {
+                    setReportingMonthPinned(true);
+                    setActiveDataMonth(value);
+                  }}
+                  onPreviousMonth={() => {
+                    setReportingMonthPinned(true);
+                    setActiveDataMonth((prev) => shiftMonth(prev, -1));
+                  }}
+                  onNextMonth={() => {
+                    setReportingMonthPinned(true);
+                    setActiveDataMonth((prev) => shiftMonth(prev, 1));
+                  }}
+                  onGoToCurrentMonth={() => {
+                    setReportingMonthPinned(false);
+                    setActiveDataMonth(getMonthStart(new Date()));
+                  }}
+                />
+                <StatCards stats={stats} />
+                <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />
+              </>
+            )}
+            {!isClientView && canEdit(currentUser) && (
+              <PlannedContentTable rows={mergedPlanRows} onDraftChange={updateDraft} onSaveUpdate={saveDraftToStatusLog} onEdit={handleEditPlan} onDelete={handleDeletePlan} busy={busy} />
+            )}
+            {!isClientView && <ExecutionStatusTable rows={summaryStatusRecords} />}
+            {!isClientView && <StatCards stats={stats} />}
             {!isClientView && (
-              <MonthScopeControls
+              <PerformanceDashboard
+                rows={mergedPlanRows}
+                records={monthFilteredStatusRecords}
+                allRecords={filteredStatusRecords}
                 monthDate={activeDataMonth}
                 onChangeMonth={(value) => {
                   setReportingMonthPinned(true);
@@ -3537,38 +3610,6 @@ function ClientSocialMediaPostingTrackerInterface() {
                 }}
               />
             )}
-            {isClientView && (
-              <>
-                <PerformanceDashboard rows={mergedPlanRows} records={monthFilteredStatusRecords} allRecords={filteredStatusRecords} monthDate={activeDataMonth} isClientView />
-                <StatCards stats={stats} />
-                <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />
-                <MonthScopeControls
-                  monthDate={activeDataMonth}
-                  onChangeMonth={(value) => {
-                    setReportingMonthPinned(true);
-                    setActiveDataMonth(value);
-                  }}
-                  onPreviousMonth={() => {
-                    setReportingMonthPinned(true);
-                    setActiveDataMonth((prev) => shiftMonth(prev, -1));
-                  }}
-                  onNextMonth={() => {
-                    setReportingMonthPinned(true);
-                    setActiveDataMonth((prev) => shiftMonth(prev, 1));
-                  }}
-                  onGoToCurrentMonth={() => {
-                    setReportingMonthPinned(false);
-                    setActiveDataMonth(getMonthStart(new Date()));
-                  }}
-                />
-              </>
-            )}
-            {!isClientView && canEdit(currentUser) && (
-              <PlannedContentTable rows={mergedPlanRows} onDraftChange={updateDraft} onSaveUpdate={saveDraftToStatusLog} onEdit={handleEditPlan} onDelete={handleDeletePlan} busy={busy} />
-            )}
-            {!isClientView && <ExecutionStatusTable rows={summaryStatusRecords} />}
-            {!isClientView && <StatCards stats={stats} />}
-            {!isClientView && <PerformanceDashboard rows={mergedPlanRows} records={monthFilteredStatusRecords} allRecords={filteredStatusRecords} monthDate={activeDataMonth} />}
             <CalendarView
               rows={mergedPlanRows}
               monthDate={calendarMonth}
