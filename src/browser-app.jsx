@@ -917,6 +917,15 @@ function AccessManagementPanel({
   inviteBusy,
   clientOptions,
 }) {
+  const selectedClientScopes = parseClientScopeList(inviteForm.clientName);
+
+  function toggleClientScope(client) {
+    const nextScopes = selectedClientScopes.includes(client)
+      ? selectedClientScopes.filter((item) => item !== client)
+      : [...selectedClientScopes, client];
+    onInviteFormChange("clientName", nextScopes.join(", "));
+  }
+
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -975,24 +984,42 @@ function AccessManagementPanel({
 
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">Client Scope</label>
-              <input
-                value={inviteForm.clientName}
-                onChange={(event) => onInviteFormChange("clientName", event.target.value)}
-                list="tracker-client-suggestions"
-                disabled={inviteForm.role !== "client"}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
-                placeholder={inviteForm.role === "client" ? "Acme Client, Beta Foods" : "Only required for client access"}
-              />
-              <datalist id="tracker-client-suggestions">
-                {clientOptions.map((client) => (
-                  <option key={client} value={client} />
-                ))}
-              </datalist>
-              {inviteForm.role === "client" && (
-                <p className="mt-2 text-xs text-slate-500">
-                  Add multiple brands as a comma-separated list when this client should see more than one brand.
-                </p>
-              )}
+              <div className={`rounded-2xl border border-slate-200 bg-white p-3 ${inviteForm.role !== "client" ? "cursor-not-allowed bg-slate-100" : ""}`}>
+                {inviteForm.role === "client" ? (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {clientOptions.map((client) => {
+                        const selected = selectedClientScopes.includes(client);
+                        return (
+                          <button
+                            key={client}
+                            type="button"
+                            onClick={() => toggleClientScope(client)}
+                            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+                              selected
+                                ? "bg-slate-900 text-white"
+                                : "border border-slate-200 bg-white text-slate-700"
+                            }`}
+                          >
+                            {client}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <input
+                      value={inviteForm.clientName}
+                      onChange={(event) => onInviteFormChange("clientName", event.target.value)}
+                      className="mt-3 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400"
+                      placeholder="Add extra brands as comma-separated names"
+                    />
+                    <p className="mt-2 text-xs text-slate-500">
+                      Select one or more brands above. You can also type additional brand names separated by commas.
+                    </p>
+                  </>
+                ) : (
+                  <div className="px-1 py-2 text-sm text-slate-400">Only required for client access</div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1761,6 +1788,10 @@ function PerformanceDashboard({ rows, monthDate, isClientView = false }) {
   }, [postedRows]);
 
   const monthLabel = formatMonthLabel(monthDate);
+  const postedRowsWithAnyMetrics = useMemo(
+    () => rows.filter((row) => row.currentStatus === "Posted"),
+    [rows]
+  );
 
   return (
     <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
@@ -1781,7 +1812,9 @@ function PerformanceDashboard({ rows, monthDate, isClientView = false }) {
 
       {postedRows.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
-          No performance metrics recorded for this month yet. Save a posted update with metrics to start building client-friendly reporting.
+          {postedRowsWithAnyMetrics.length === 0
+            ? `No posted content was found for ${monthLabel}. Change the reporting month or save a posted update with metrics to start building client-friendly reporting.`
+            : `Posted content exists for ${monthLabel}, but no metrics are attached to those posted items yet. Save reach, impressions, likes, comments, shares, or clicks to populate this dashboard.`}
         </div>
       ) : (
         <div className="mt-6 space-y-6">
@@ -1996,20 +2029,34 @@ function PlannedPostsPanel({ rows }) {
 
 function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDelete, busy }) {
   const [selectedPlatform, setSelectedPlatform] = useState("All Platforms");
+  const [selectedClient, setSelectedClient] = useState("All Clients");
   const platformOptions = useMemo(
     () => Array.from(new Set(rows.map((row) => row.platform).filter(Boolean))).sort(),
     [rows]
   );
+  const clientOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.clientName).filter(Boolean))).sort(),
+    [rows]
+  );
   const filteredRows = useMemo(() => {
-    if (selectedPlatform === "All Platforms") return rows;
-    return rows.filter((row) => row.platform === selectedPlatform);
-  }, [rows, selectedPlatform]);
+    return rows.filter((row) => {
+      const clientMatch = selectedClient === "All Clients" || row.clientName === selectedClient;
+      const platformMatch = selectedPlatform === "All Platforms" || row.platform === selectedPlatform;
+      return clientMatch && platformMatch;
+    });
+  }, [rows, selectedClient, selectedPlatform]);
 
   useEffect(() => {
     if (selectedPlatform !== "All Platforms" && !platformOptions.includes(selectedPlatform)) {
       setSelectedPlatform("All Platforms");
     }
   }, [platformOptions, selectedPlatform]);
+
+  useEffect(() => {
+    if (selectedClient !== "All Clients" && !clientOptions.includes(selectedClient)) {
+      setSelectedClient("All Clients");
+    }
+  }, [clientOptions, selectedClient]);
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -2019,6 +2066,33 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
           <p className="text-sm text-slate-500">This is the backend record of all planned items captured from the planned interface. You can still edit, update, and push entries into the execution status log here.</p>
         </div>
         <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{filteredRows.length} Planned</div>
+      </div>
+      <div className="mb-5 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setSelectedClient("All Clients")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            selectedClient === "All Clients"
+              ? "bg-slate-900 text-white"
+              : "border border-slate-200 bg-white text-slate-700"
+          }`}
+        >
+          All Clients
+        </button>
+        {clientOptions.map((client) => (
+          <button
+            key={client}
+            type="button"
+            onClick={() => setSelectedClient(client)}
+            className={`rounded-full px-4 py-2 text-sm font-semibold ${
+              selectedClient === client
+                ? "bg-slate-900 text-white"
+                : "border border-slate-200 bg-white text-slate-700"
+            }`}
+          >
+            {client}
+          </button>
+        ))}
       </div>
       <div className="mb-5 flex flex-wrap gap-2">
         <button
