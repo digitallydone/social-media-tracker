@@ -1972,8 +1972,7 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
         </div>
         <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{rows.length} Planned</div>
       </div>
-
-      <div className="space-y-4 md:hidden">
+      <div className="space-y-4">
         {rows.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
             No planned log entries yet. Use the planner to create your first post.
@@ -1981,112 +1980,82 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
         ) : rows.map((plan) => {
           const planKey = getPlanKey(plan);
           return (
-            <div key={plan.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-start justify-between gap-3">
+            <div key={plan.id} className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 shadow-sm">
+              <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">{plan.topic || "-"}</div>
-                  <div className="mt-1 text-xs text-slate-500">{plan.clientName} | {plan.platform}</div>
+                  <div className="text-lg font-semibold text-slate-900">{plan.topic || "-"}</div>
+                  <div className="mt-1 text-sm text-slate-500">{plan.clientName} · {plan.platform}</div>
                 </div>
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                  {formatDateLabel(plan.date)}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                    {formatDateLabel(plan.date)}
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                    {plan.format || "No format"}
+                  </span>
+                  {plan.currentStatus === "-" ? (
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
+                      Planned
+                    </span>
+                  ) : (
+                    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(plan.currentStatus)}`}>
+                      {plan.currentStatus}
+                    </span>
+                  )}
+                </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-600">
-                <div><div className="text-xs uppercase tracking-wide text-slate-400">Format</div><div className="mt-1 font-medium text-slate-800">{plan.format || "-"}</div></div>
-                <div><div className="text-xs uppercase tracking-wide text-slate-400">Time</div><div className="mt-1 font-medium text-slate-800">{formatTimeLabel(plan.time)}</div></div>
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-400">Current Status</div>
-                  <div className="mt-1">
-                    {plan.currentStatus === "-" ? <span className="text-slate-400">-</span> : <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(plan.currentStatus)}`}>{plan.currentStatus}</span>}
+              <div className="mt-4 grid gap-4 xl:grid-cols-[0.8fr,1.2fr]">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-white p-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Time</div>
+                      <div className="mt-2 text-base font-semibold text-slate-900">{formatTimeLabel(plan.time)}</div>
+                    </div>
+                    <div className="rounded-2xl bg-white p-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Current Link</div>
+                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                        {plan.currentPostLink ? (
+                          <a href={normalizeUrl(plan.currentPostLink)} target="_blank" rel="noreferrer" className="underline underline-offset-4">
+                            View Post
+                          </a>
+                        ) : "No link"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-white p-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Planning Notes</div>
+                    <div className="mt-3 text-sm leading-7 text-slate-700">{plan.notes || "No planning notes added."}</div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-400">Update Status</div>
-                  <select value={plan.draftStatus} onChange={(e) => onDraftChange(planKey, "status", e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs">
-                    <option value="">Select status</option>
-                    {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
-                  </select>
-                </div>
-              </div>
 
-              <div className="mt-4 space-y-3">
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-400">Post Link</div>
-                  <input value={plan.draftPostLink} onChange={(e) => onDraftChange(planKey, "postLink", e.target.value)} placeholder="Paste URL" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" />
-                </div>
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-400">Update Notes</div>
-                  <textarea value={plan.draftNotes} onChange={(e) => onDraftChange(planKey, "notes", e.target.value)} rows={2} placeholder="Add update notes" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" />
-                </div>
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-400">Performance Metrics</div>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    {[
-                      ["reach", "Reach"],
-                      ["impressions", "Impressions"],
-                      ["likes", "Likes"],
-                      ["comments", "Comments"],
-                      ["shares", "Shares"],
-                      ["clicks", "Clicks"],
-                    ].map(([field, label]) => (
-                      <input
-                        key={field}
-                        type="number"
-                        min="0"
-                        value={plan[`draft${field.charAt(0).toUpperCase()}${field.slice(1)}`] ?? ""}
-                        onChange={(e) => onDraftChange(planKey, field, e.target.value)}
-                        placeholder={label}
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
-                      />
-                    ))}
+                <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Update Status</label>
+                      <select value={plan.draftStatus} onChange={(e) => onDraftChange(planKey, "status", e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm">
+                        <option value="">Select status</option>
+                        {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Post Link</label>
+                      <input value={plan.draftPostLink} onChange={(e) => onDraftChange(planKey, "postLink", e.target.value)} placeholder="Paste URL" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm" />
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button type="button" disabled={busy} onClick={() => onSaveUpdate(plan)} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">Save Update</button>
-                <button type="button" disabled={busy} onClick={() => onEdit(plan.id)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">Edit</button>
-                <button type="button" disabled={busy} onClick={() => onDelete(plan.id)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">Delete</button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                  <div className="mt-4">
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Update Notes</label>
+                    <textarea value={plan.draftNotes} onChange={(e) => onDraftChange(planKey, "notes", e.target.value)} rows={3} placeholder="Add update notes" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm" />
+                  </div>
 
-      <div className="hidden overflow-x-auto md:block">
-        <table className="min-w-full border-separate border-spacing-y-3">
-          <thead>
-            <tr className="text-left text-sm text-slate-500">
-              <th className="px-4">Date</th><th className="px-4">Platform</th><th className="px-4">Topic</th><th className="px-4">Format</th><th className="px-4">Time</th><th className="px-4">Current Status</th><th className="px-4">Update Status</th><th className="px-4">Post Link</th><th className="px-4">Update Notes</th><th className="px-4">Performance</th><th className="px-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr className="bg-slate-50"><td colSpan={11} className="rounded-2xl px-4 py-8 text-center text-sm text-slate-500">No planned log entries yet. Use the planner to create your first post.</td></tr>
-            ) : rows.map((plan) => {
-              const planKey = getPlanKey(plan);
-              return (
-                <tr key={plan.id} className="bg-slate-50">
-                  <td className="rounded-l-2xl px-4 py-4 text-sm font-medium text-slate-900">{formatDateLabel(plan.date)}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700">{plan.platform}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700">{plan.topic || "-"}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700">{plan.format || "-"}</td>
-                  <td className="px-4 py-4 text-sm text-slate-700">{formatTimeLabel(plan.time)}</td>
-                  <td className="px-4 py-4 text-sm">{plan.currentStatus === "-" ? <span className="text-slate-400">-</span> : <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(plan.currentStatus)}`}>{plan.currentStatus}</span>}</td>
-                  <td className="px-4 py-4 text-sm">
-                    <select value={plan.draftStatus} onChange={(e) => onDraftChange(planKey, "status", e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs">
-                      <option value="">Select status</option>
-                      {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
-                    </select>
-                  </td>
-                  <td className="px-4 py-4 text-sm text-slate-700">
-                    <input value={plan.draftPostLink} onChange={(e) => onDraftChange(planKey, "postLink", e.target.value)} placeholder="Paste URL" className="w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" />
-                    {plan.currentPostLink && <a href={normalizeUrl(plan.currentPostLink)} target="_blank" rel="noreferrer" className="mt-2 block text-xs font-semibold text-slate-700 underline">Current Link</a>}
-                  </td>
-                  <td className="px-4 py-4 text-sm text-slate-700"><textarea value={plan.draftNotes} onChange={(e) => onDraftChange(planKey, "notes", e.target.value)} rows={2} placeholder="Add update notes" className="w-44 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" /></td>
-                  <td className="px-4 py-4 text-sm text-slate-700">
-                    <div className="grid grid-cols-2 gap-2">
+                  <div className="mt-4">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Performance Metrics</label>
+                      <span className="text-[11px] font-medium text-slate-400">Use for posted content reporting</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
                       {[
                         ["reach", "Reach"],
                         ["impressions", "Impressions"],
@@ -2095,30 +2064,31 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
                         ["shares", "Shares"],
                         ["clicks", "Clicks"],
                       ].map(([field, label]) => (
-                        <input
-                          key={field}
-                          type="number"
-                          min="0"
-                          value={plan[`draft${field.charAt(0).toUpperCase()}${field.slice(1)}`] ?? ""}
-                          onChange={(e) => onDraftChange(planKey, field, e.target.value)}
-                          placeholder={label}
-                          className="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
-                        />
+                        <div key={field}>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
+                          <input
+                            type="number"
+                            min="0"
+                            value={plan[`draft${field.charAt(0).toUpperCase()}${field.slice(1)}`] ?? ""}
+                            onChange={(e) => onDraftChange(planKey, field, e.target.value)}
+                            placeholder={label}
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm"
+                          />
+                        </div>
                       ))}
                     </div>
-                  </td>
-                  <td className="rounded-r-2xl px-4 py-4 text-sm font-medium text-slate-700">
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" disabled={busy} onClick={() => onSaveUpdate(plan)} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">Save Update</button>
-                      <button type="button" disabled={busy} onClick={() => onEdit(plan.id)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">Edit</button>
-                      <button type="button" disabled={busy} onClick={() => onDelete(plan.id)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <button type="button" disabled={busy} onClick={() => onSaveUpdate(plan)} className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">Save Update</button>
+                    <button type="button" disabled={busy} onClick={() => onEdit(plan.id)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">Edit</button>
+                    <button type="button" disabled={busy} onClick={() => onDelete(plan.id)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">Delete</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -2628,7 +2598,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
 
       let statusQuery = supabase
         .from("status_records")
-        .select("id, plan_id, client_name, date, platform, topic, format, time, status, post_link, notes")
+        .select("id, plan_id, client_name, date, platform, topic, format, time, status, post_link, notes, reach, impressions, likes, comments, shares, clicks")
         .order("date", { ascending: true });
 
       if (user.role === "client" && user.clientName) {
