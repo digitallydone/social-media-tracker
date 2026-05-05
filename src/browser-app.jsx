@@ -1737,10 +1737,45 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
   );
 }
 
-function PerformanceDashboard({ rows, records, monthDate, isClientView = false }) {
+function PerformanceDashboard({ rows, records, allRecords = [], monthDate, isClientView = false }) {
+  const monthScopedRecords = useMemo(
+    () => records.filter((row) => isSameMonth(row.date, monthDate)),
+    [records, monthDate]
+  );
+
   const postedRows = useMemo(
-    () => records.filter((row) => row.status === "Posted" && hasPerformanceMetrics(row)),
-    [records]
+    () =>
+      monthScopedRecords.filter(
+        (row) => String(row.status || "").trim().toLowerCase() === "posted" && hasPerformanceMetrics(row)
+      ),
+    [monthScopedRecords]
+  );
+
+  const postedRowsWithAnyMetricsAcrossMonths = useMemo(
+    () =>
+      allRecords.filter(
+        (row) => String(row.status || "").trim().toLowerCase() === "posted" && hasPerformanceMetrics(row)
+      ),
+    [allRecords]
+  );
+
+  const nearestMetricMonth = useMemo(() => {
+    if (!postedRowsWithAnyMetricsAcrossMonths.length) return null;
+    return [...postedRowsWithAnyMetricsAcrossMonths]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.date || null;
+  }, [postedRowsWithAnyMetricsAcrossMonths]);
+
+  const monthPostedRows = useMemo(
+    () => monthScopedRecords.filter((row) => String(row.status || "").trim().toLowerCase() === "posted"),
+    [monthScopedRecords]
+  );
+
+  const monthNonPostedMetricRows = useMemo(
+    () =>
+      monthScopedRecords.filter(
+        (row) => String(row.status || "").trim().toLowerCase() !== "posted" && hasPerformanceMetrics(row)
+      ),
+    [monthScopedRecords]
   );
 
   const totals = useMemo(() => {
@@ -1788,10 +1823,6 @@ function PerformanceDashboard({ rows, records, monthDate, isClientView = false }
   }, [postedRows]);
 
   const monthLabel = formatMonthLabel(monthDate);
-  const postedRowsWithAnyMetrics = useMemo(
-    () => records.filter((row) => row.status === "Posted"),
-    [records]
-  );
 
   return (
     <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
@@ -1812,9 +1843,13 @@ function PerformanceDashboard({ rows, records, monthDate, isClientView = false }
 
       {postedRows.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
-          {postedRowsWithAnyMetrics.length === 0
+          {monthPostedRows.length === 0 && monthNonPostedMetricRows.length > 0
+            ? `Metrics have been entered for ${monthLabel}, but those items are not marked Posted yet. Change the status to Posted for the saved metrics to appear in Performance Overview.`
+            : monthPostedRows.length === 0
             ? `No posted content was found for ${monthLabel}. Change the reporting month or save a posted update with metrics to start building client-friendly reporting.`
-            : `Posted content exists for ${monthLabel}, but no metrics are attached to those posted items yet. Save reach, impressions, likes, comments, shares, or clicks to populate this dashboard.`}
+            : nearestMetricMonth
+              ? `Posted content exists for ${monthLabel}, but no metrics are attached to those posted items yet. The latest saved metrics are in ${formatMonthLabel(nearestMetricMonth)}. Switch the reporting month or save reach, impressions, likes, comments, shares, or clicks on a posted item in ${monthLabel}.`
+              : `Posted content exists for ${monthLabel}, but no metrics are attached to those posted items yet. Save reach, impressions, likes, comments, shares, or clicks to populate this dashboard.`}
         </div>
       ) : (
         <div className="mt-6 space-y-6">
@@ -2641,6 +2676,7 @@ function ClientSocialMediaPostingTrackerInterface() {
   const [isClientView, setIsClientView] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [activeDataMonth, setActiveDataMonth] = useState(initialDataMonth);
+  const [reportingMonthPinned, setReportingMonthPinned] = useState(false);
   const [currentUser, setCurrentUser] = useState(() => readStoredObject(SESSION_STORAGE_KEY, null));
   const [selectedClientName, setSelectedClientName] = useState("All Clients");
   const [authEmail, setAuthEmail] = useState("");
@@ -2678,11 +2714,28 @@ function ClientSocialMediaPostingTrackerInterface() {
     if (currentUser.role === "client") {
       setIsClientView(true);
       const scopes = parseClientScopeList(currentUser.clientName);
-      setSelectedClientName(scopes.length <= 1 ? (scopes[0] || "All Clients") : "All Clients");
+      if (selectedClientName !== "All Clients" && !scopes.includes(selectedClientName)) {
+        setSelectedClientName(scopes.length === 1 ? (scopes[0] || "All Clients") : "All Clients");
+      } else if (selectedClientName === "All Clients" && scopes.length === 1) {
+        setSelectedClientName(scopes[0]);
+      }
     } else if (!accessibleClientNames.includes(selectedClientName) && selectedClientName !== "All Clients") {
       setSelectedClientName("All Clients");
     }
   }, [currentUser, accessibleClientNames, selectedClientName]);
+
+  useEffect(() => {
+    if (reportingMonthPinned) return undefined;
+    const syncMonthToCurrent = () => {
+      const currentMonth = getMonthStart(new Date());
+      if (!isSameMonth(activeDataMonth, currentMonth)) {
+        setActiveDataMonth(currentMonth);
+      }
+    };
+    syncMonthToCurrent();
+    const intervalId = window.setInterval(syncMonthToCurrent, 60 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, [activeDataMonth, reportingMonthPinned]);
 
   async function loadRemoteSession() {
     if (!supabase) return;
@@ -2732,6 +2785,8 @@ function ClientSocialMediaPostingTrackerInterface() {
     });
     setAuthNotice("");
     setSyncState("connected");
+    setReportingMonthPinned(false);
+    setActiveDataMonth(getMonthStart(new Date()));
   }
 
   async function loadRemoteData(user) {
@@ -3336,6 +3391,8 @@ function ClientSocialMediaPostingTrackerInterface() {
       setPlans([]);
       setStatusRecords([]);
       setStatusDrafts({});
+      setReportingMonthPinned(false);
+      setActiveDataMonth(getMonthStart(new Date()));
       setSelectedClientName("All Clients");
       setIsClientView(false);
       setSelectedCalendarPost(null);
@@ -3346,6 +3403,8 @@ function ClientSocialMediaPostingTrackerInterface() {
 
     setCurrentUser(null);
     setIsClientView(false);
+    setReportingMonthPinned(false);
+    setActiveDataMonth(getMonthStart(new Date()));
     setSelectedClientName("All Clients");
     setSelectedCalendarPost(null);
     setSelectedCalendarOverflow(null);
@@ -3360,6 +3419,8 @@ function ClientSocialMediaPostingTrackerInterface() {
           setCurrentUser(user);
           setIsClientView(user.role === "client");
           setSelectedClientName(user.role === "client" ? user.clientName : "All Clients");
+          setReportingMonthPinned(false);
+          setActiveDataMonth(getMonthStart(new Date()));
           setNotice(`${user.name} signed in.`);
         }}
         sharedMode={sharedModeReady}
@@ -3458,23 +3519,47 @@ function ClientSocialMediaPostingTrackerInterface() {
             {!isClientView && (
               <MonthScopeControls
                 monthDate={activeDataMonth}
-                onChangeMonth={setActiveDataMonth}
-                onPreviousMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, -1))}
-                onNextMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, 1))}
-                onGoToCurrentMonth={() => setActiveDataMonth(getMonthStart(new Date()))}
+                onChangeMonth={(value) => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth(value);
+                }}
+                onPreviousMonth={() => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth((prev) => shiftMonth(prev, -1));
+                }}
+                onNextMonth={() => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth((prev) => shiftMonth(prev, 1));
+                }}
+                onGoToCurrentMonth={() => {
+                  setReportingMonthPinned(false);
+                  setActiveDataMonth(getMonthStart(new Date()));
+                }}
               />
             )}
             {isClientView && (
               <>
-                <PerformanceDashboard rows={mergedPlanRows} records={monthFilteredStatusRecords} monthDate={activeDataMonth} isClientView />
+                <PerformanceDashboard rows={mergedPlanRows} records={monthFilteredStatusRecords} allRecords={filteredStatusRecords} monthDate={activeDataMonth} isClientView />
                 <StatCards stats={stats} />
                 <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />
                 <MonthScopeControls
                   monthDate={activeDataMonth}
-                  onChangeMonth={setActiveDataMonth}
-                  onPreviousMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, -1))}
-                  onNextMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, 1))}
-                  onGoToCurrentMonth={() => setActiveDataMonth(getMonthStart(new Date()))}
+                  onChangeMonth={(value) => {
+                    setReportingMonthPinned(true);
+                    setActiveDataMonth(value);
+                  }}
+                  onPreviousMonth={() => {
+                    setReportingMonthPinned(true);
+                    setActiveDataMonth((prev) => shiftMonth(prev, -1));
+                  }}
+                  onNextMonth={() => {
+                    setReportingMonthPinned(true);
+                    setActiveDataMonth((prev) => shiftMonth(prev, 1));
+                  }}
+                  onGoToCurrentMonth={() => {
+                    setReportingMonthPinned(false);
+                    setActiveDataMonth(getMonthStart(new Date()));
+                  }}
                 />
               </>
             )}
@@ -3483,7 +3568,7 @@ function ClientSocialMediaPostingTrackerInterface() {
             )}
             {!isClientView && <ExecutionStatusTable rows={summaryStatusRecords} />}
             {!isClientView && <StatCards stats={stats} />}
-            {!isClientView && <PerformanceDashboard rows={mergedPlanRows} records={monthFilteredStatusRecords} monthDate={activeDataMonth} />}
+            {!isClientView && <PerformanceDashboard rows={mergedPlanRows} records={monthFilteredStatusRecords} allRecords={filteredStatusRecords} monthDate={activeDataMonth} />}
             <CalendarView
               rows={mergedPlanRows}
               monthDate={calendarMonth}
