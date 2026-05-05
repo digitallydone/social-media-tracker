@@ -1806,65 +1806,297 @@ function ExecutionStatusTable({ rows }) {
 }
 
 function SnapshotPanel({ snapshotView, onToggle, activeSummary }) {
+  const [selectedPeriod, setSelectedPeriod] = useState("");
+
+  useEffect(() => {
+    if (!activeSummary.length) {
+      setSelectedPeriod("");
+      return;
+    }
+
+    if (!activeSummary.some((item) => item.period === selectedPeriod)) {
+      setSelectedPeriod(activeSummary[0].period);
+    }
+  }, [activeSummary, selectedPeriod]);
+
+  const featuredPeriod =
+    activeSummary.find((item) => item.period === selectedPeriod) || activeSummary[0] || null;
+
+  const statusCards = featuredPeriod
+    ? [
+        {
+          label: "Planned",
+          value: featuredPeriod.totals.planned,
+          className: "border-blue-200 bg-blue-50 text-blue-700",
+        },
+        {
+          label: "Posted",
+          value: featuredPeriod.totals.posted,
+          className: "border-green-200 bg-green-50 text-green-700",
+        },
+        {
+          label: "Pending",
+          value: featuredPeriod.totals.pending,
+          className: "border-yellow-200 bg-yellow-50 text-yellow-700",
+        },
+        {
+          label: "Missed",
+          value: featuredPeriod.totals.missed,
+          className: "border-red-200 bg-red-50 text-red-700",
+        },
+        {
+          label: "Rescheduled",
+          value: featuredPeriod.totals.rescheduled,
+          className: "border-orange-200 bg-orange-50 text-orange-700",
+        },
+        {
+          label: "Overdue",
+          value: featuredPeriod.totals.overdue,
+          className: "border-rose-200 bg-rose-50 text-rose-700",
+        },
+      ]
+    : [];
+
+  const platformCards = featuredPeriod
+    ? [...featuredPeriod.platforms].sort((a, b) => {
+        const aWeight = a.planned + a.posted + a.pending + a.missed + a.rescheduled + a.overdue;
+        const bWeight = b.planned + b.posted + b.pending + b.missed + b.rescheduled + b.overdue;
+        return bWeight - aWeight;
+      })
+    : [];
+
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="mb-5 flex items-start justify-between gap-4">
+    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-slate-900">Plan vs Execution Snapshot</h3>
-          <p className="text-sm text-slate-500">Daily, weekly and monthly views show platform-by-platform status counts and performance score.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            Dashboard View
+          </p>
+          <h3 className="mt-2 text-2xl font-semibold text-slate-900">
+            Plan vs Execution
+          </h3>
+          <p className="mt-2 max-w-2xl text-sm text-slate-500">
+            Compare planned volume against execution outcomes with a cleaner,
+            period-led dashboard view.
+          </p>
         </div>
-        <div className="inline-flex rounded-2xl bg-slate-100 p-1">
-          <button type="button" onClick={() => onToggle("daily")} className={`rounded-xl px-4 py-2 text-sm font-semibold ${snapshotView === "daily" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}>Daily</button>
-          <button type="button" onClick={() => onToggle("weekly")} className={`rounded-xl px-4 py-2 text-sm font-semibold ${snapshotView === "weekly" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}>Weekly</button>
-          <button type="button" onClick={() => onToggle("monthly")} className={`rounded-xl px-4 py-2 text-sm font-semibold ${snapshotView === "monthly" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}>Monthly</button>
+        <div className="inline-flex w-full rounded-2xl bg-slate-100 p-1 xl:w-auto">
+          <button
+            type="button"
+            onClick={() => onToggle("daily")}
+            className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold xl:flex-none ${
+              snapshotView === "daily" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
+            }`}
+          >
+            Daily
+          </button>
+          <button
+            type="button"
+            onClick={() => onToggle("weekly")}
+            className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold xl:flex-none ${
+              snapshotView === "weekly" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
+            }`}
+          >
+            Weekly
+          </button>
+          <button
+            type="button"
+            onClick={() => onToggle("monthly")}
+            className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold xl:flex-none ${
+              snapshotView === "monthly" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
+            }`}
+          >
+            Monthly
+          </button>
         </div>
       </div>
-      {activeSummary.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">No snapshot data yet. Add planned posts and save status updates to generate reporting.</div>
+
+      {activeSummary.length === 0 || !featuredPeriod ? (
+        <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+          No snapshot data yet. Add planned posts and save status updates to generate reporting.
+        </div>
       ) : (
-        <div className="space-y-5">
-          {activeSummary.map((periodItem) => (
-            <div key={periodItem.period} className="rounded-2xl bg-slate-50 p-4">
-              <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-center md:justify-between">
+        <div className="mt-6 space-y-6">
+          <div className="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
+            <div className="overflow-hidden rounded-[1.75rem] bg-[radial-gradient(circle_at_top_left,_rgba(148,163,184,0.26),_transparent_38%),linear-gradient(135deg,#0f172a,#1e293b_58%,#334155)] p-6 text-white shadow-sm">
+              <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <h4 className="font-semibold text-slate-900">{periodItem.period}</h4>
-                  <p className="text-sm text-slate-500">Planned {periodItem.totals.planned} | Posted {periodItem.totals.posted} | Pending {periodItem.totals.pending} | Missed {periodItem.totals.missed} | Rescheduled {periodItem.totals.rescheduled} | Overdue {periodItem.totals.overdue}</p>
-                </div>
-                <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-700">Execution Score {periodItem.executionScore}%</div>
-              </div>
-              <div className="mt-4 space-y-3">
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-100 p-4">
-                  <div className="grid grid-cols-2 gap-3 text-xs font-semibold md:grid-cols-7">
-                    <div className="rounded-xl bg-blue-100 px-3 py-2 text-blue-700">Planned Total {periodItem.totals.planned}</div>
-                    <div className="rounded-xl bg-green-100 px-3 py-2 text-green-700">Posted Total {periodItem.totals.posted}</div>
-                    <div className="rounded-xl bg-yellow-100 px-3 py-2 text-yellow-700">Pending Total {periodItem.totals.pending}</div>
-                    <div className="rounded-xl bg-red-100 px-3 py-2 text-red-700">Missed Total {periodItem.totals.missed}</div>
-                    <div className="rounded-xl bg-orange-100 px-3 py-2 text-orange-700">Rescheduled Total {periodItem.totals.rescheduled}</div>
-                    <div className="rounded-xl bg-rose-100 px-3 py-2 text-rose-700">Overdue Total {periodItem.totals.overdue}</div>
-                    <div className="rounded-xl bg-slate-900 px-3 py-2 text-white">Score {periodItem.executionScore}%</div>
+                  <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200">
+                    Focus Period
                   </div>
+                  <h4 className="mt-4 text-2xl font-semibold">{featuredPeriod.period}</h4>
+                  <p className="mt-2 max-w-xl text-sm text-slate-300">
+                    {featuredPeriod.totals.posted} of {featuredPeriod.totals.planned} planned posts
+                    have been executed in this view.
+                  </p>
                 </div>
-                {periodItem.platforms.map((platformItem) => (
-                  <div key={`${periodItem.period}-${platformItem.platform}`} className="rounded-2xl bg-white p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <h5 className="font-semibold text-slate-900">{platformItem.platform}</h5>
-                        <p className="mt-1 text-xs text-slate-500">Execution Score {platformItem.executionScore}%</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                        <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-blue-700">Planned {platformItem.planned}</span>
-                        <span className="rounded-full border border-green-200 bg-green-100 px-3 py-1 text-green-700">Posted {platformItem.posted}</span>
-                        <span className="rounded-full border border-yellow-200 bg-yellow-100 px-3 py-1 text-yellow-700">Pending {platformItem.pending}</span>
-                        <span className="rounded-full border border-red-200 bg-red-100 px-3 py-1 text-red-700">Missed {platformItem.missed}</span>
-                        <span className="rounded-full border border-orange-200 bg-orange-100 px-3 py-1 text-orange-700">Rescheduled {platformItem.rescheduled}</span>
-                        <span className="rounded-full border border-rose-200 bg-rose-100 px-3 py-1 text-rose-700">Overdue {platformItem.overdue}</span>
-                      </div>
+                <div className="rounded-3xl border border-white/15 bg-white/10 px-5 py-4 backdrop-blur">
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">
+                    Execution Score
+                  </div>
+                  <div className="mt-2 text-4xl font-semibold">{featuredPeriod.executionScore}%</div>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">
+                  <span>Completion</span>
+                  <span>{featuredPeriod.totals.posted}/{featuredPeriod.totals.planned || 0} posted</span>
+                </div>
+                <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-emerald-400 transition-all"
+                    style={{ width: `${featuredPeriod.executionScore}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3">
+                {statusCards.map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                      {item.label}
                     </div>
+                    <div className="mt-2 text-2xl font-semibold text-white">{item.value}</div>
                   </div>
                 ))}
               </div>
             </div>
-          ))}
+
+            <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-lg font-semibold text-slate-900">Available Periods</h4>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Click a period to refresh the dashboard focus.
+                  </p>
+                </div>
+                <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                  {activeSummary.length} Periods
+                </div>
+              </div>
+              <div className="mt-4 space-y-3">
+                {activeSummary.map((periodItem) => {
+                  const isActive = periodItem.period === featuredPeriod.period;
+                  return (
+                    <button
+                      key={periodItem.period}
+                      type="button"
+                      onClick={() => setSelectedPeriod(periodItem.period)}
+                      className={`w-full rounded-2xl border p-4 text-left transition ${
+                        isActive
+                          ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                          : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className={`text-sm font-semibold ${isActive ? "text-white" : "text-slate-900"}`}>
+                            {periodItem.period}
+                          </div>
+                          <div className={`mt-1 text-xs ${isActive ? "text-slate-300" : "text-slate-500"}`}>
+                            Planned {periodItem.totals.planned} · Posted {periodItem.totals.posted}
+                          </div>
+                        </div>
+                        <div className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          isActive ? "bg-white/10 text-white" : "bg-slate-100 text-slate-700"
+                        }`}>
+                          {periodItem.executionScore}%
+                        </div>
+                      </div>
+                      <div className={`mt-3 h-2 overflow-hidden rounded-full ${isActive ? "bg-white/10" : "bg-slate-100"}`}>
+                        <div
+                          className={`h-full rounded-full ${isActive ? "bg-emerald-300" : "bg-slate-900"}`}
+                          style={{ width: `${periodItem.executionScore}%` }}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+            {statusCards.map((item) => (
+              <div key={`${featuredPeriod.period}-${item.label}`} className={`rounded-2xl border px-4 py-4 ${item.className}`}>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em]">{item.label}</div>
+                <div className="mt-3 text-3xl font-semibold">{item.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+            <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h4 className="text-lg font-semibold text-slate-900">Platform Performance</h4>
+                <p className="mt-1 text-sm text-slate-500">
+                  A tidier platform-by-platform view for the selected period.
+                </p>
+              </div>
+              <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                {platformCards.length} Platforms
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">
+              {platformCards.map((platformItem) => (
+                <div
+                  key={`${featuredPeriod.period}-${platformItem.platform}`}
+                  className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h5 className="text-lg font-semibold text-slate-900">{platformItem.platform}</h5>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {platformItem.posted} posted from {platformItem.planned} planned entries
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-900 px-4 py-2 text-right text-white">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+                        Score
+                      </div>
+                      <div className="mt-1 text-2xl font-semibold">{platformItem.executionScore}%</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                      <span>Posting Pace</span>
+                      <span>{platformItem.posted}/{platformItem.planned || 0}</span>
+                    </div>
+                    <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-slate-900 transition-all"
+                        style={{ width: `${platformItem.executionScore}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700">
+                      Planned {platformItem.planned}
+                    </span>
+                    <span className="rounded-full border border-green-200 bg-green-50 px-3 py-1 text-green-700">
+                      Posted {platformItem.posted}
+                    </span>
+                    <span className="rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-yellow-700">
+                      Pending {platformItem.pending}
+                    </span>
+                    <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-red-700">
+                      Missed {platformItem.missed}
+                    </span>
+                    <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-orange-700">
+                      Rescheduled {platformItem.rescheduled}
+                    </span>
+                    <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-rose-700">
+                      Overdue {platformItem.overdue}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
