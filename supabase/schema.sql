@@ -96,6 +96,26 @@ as $$
   select client_name from public.profiles where id = auth.uid()
 $$;
 
+create or replace function public.has_client_scope(target_client text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = auth.uid()
+      and target_client = any(
+        string_to_array(
+          regexp_replace(coalesce(client_name, ''), '\s*,\s*', ',', 'g'),
+          ','
+        )
+      )
+  )
+$$;
+
 create or replace function public.sync_profile_from_invite(
   target_user_id uuid,
   target_email text,
@@ -227,7 +247,7 @@ on public.plans
 for select
 using (
   public.get_my_role() in ('admin', 'manager')
-  or client_name = public.get_my_client_name()
+  or public.has_client_scope(client_name)
 );
 
 drop policy if exists "plans_write_admin_manager" on public.plans;
@@ -243,7 +263,7 @@ on public.status_records
 for select
 using (
   public.get_my_role() in ('admin', 'manager')
-  or client_name = public.get_my_client_name()
+  or public.has_client_scope(client_name)
 );
 
 drop policy if exists "status_write_admin_manager" on public.status_records;
@@ -263,6 +283,7 @@ grant select on public.plans to anon;
 grant select on public.status_records to anon;
 grant execute on function public.get_my_role() to anon, authenticated;
 grant execute on function public.get_my_client_name() to anon, authenticated;
+grant execute on function public.has_client_scope(text) to anon, authenticated;
 grant execute on function public.sync_profile_from_invite(uuid, text, text) to authenticated;
 grant execute on function public.ensure_my_profile() to authenticated;
 grant execute on function public.handle_new_user_profile() to authenticated;

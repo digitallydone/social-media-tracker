@@ -4,6 +4,7 @@ const APP_TITLE = "Client Social Media Posting Tracker";
 const PLAN_STORAGE_KEY = "client-posting-tracker-plans";
 const STATUS_STORAGE_KEY = "client-posting-tracker-status-records";
 const SESSION_STORAGE_KEY = "client-posting-tracker-session";
+const STATUS_DRAFTS_STORAGE_KEY = "client-posting-tracker-status-drafts";
 
 const PLATFORM_OPTIONS = [
   "Instagram",
@@ -535,12 +536,34 @@ function getAccessibleClientNames(plans) {
   return Array.from(new Set(plans.map((plan) => plan.clientName).filter(Boolean))).sort();
 }
 
+function parseClientScopeList(value) {
+  if (!value) return [];
+  return Array.from(
+    new Set(
+      String(value)
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function userCanAccessClient(user, clientName) {
+  if (!user || !clientName) return false;
+  if (user.role === "admin" || user.role === "manager") return true;
+  return parseClientScopeList(user.clientName).includes(clientName);
+}
+
 function canEdit(user) {
   return user && (user.role === "admin" || user.role === "manager");
 }
 
 function canViewMultipleClients(user) {
-  return user && (user.role === "admin" || user.role === "manager");
+  return user && (
+    user.role === "admin" ||
+    user.role === "manager" ||
+    (user.role === "client" && parseClientScopeList(user.clientName).length > 1)
+  );
 }
 
 function getTrackerConfig() {
@@ -770,6 +793,7 @@ function LoginScreen({
 }
 
 function DashboardHeader({ currentUser, selectedClientName, onSelectClient, clientOptions, onLogout }) {
+  const allClientsLabel = currentUser.role === "client" ? "All My Brands" : "All Clients";
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -797,7 +821,7 @@ function DashboardHeader({ currentUser, selectedClientName, onSelectClient, clie
                 onChange={(e) => onSelectClient(e.target.value)}
                 className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
               >
-                <option value="All Clients">All Clients</option>
+                <option value="All Clients">{allClientsLabel}</option>
                 {clientOptions.map((client) => (
                   <option key={client} value={client}>{client}</option>
                 ))}
@@ -957,13 +981,18 @@ function AccessManagementPanel({
                 list="tracker-client-suggestions"
                 disabled={inviteForm.role !== "client"}
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
-                placeholder={inviteForm.role === "client" ? "Acme Client" : "Only required for client access"}
+                placeholder={inviteForm.role === "client" ? "Acme Client, Beta Foods" : "Only required for client access"}
               />
               <datalist id="tracker-client-suggestions">
                 {clientOptions.map((client) => (
                   <option key={client} value={client} />
                 ))}
               </datalist>
+              {inviteForm.role === "client" && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Add multiple brands as a comma-separated list when this client should see more than one brand.
+                </p>
+              )}
             </div>
           </div>
 
@@ -1074,6 +1103,9 @@ function DeploymentTools({ onExport, onImport, onResetData, hasData, isClientVie
 }
 
 function AccessSummary({ currentUser, selectedClientName }) {
+  const clientScopeLabel = currentUser.role === "client"
+    ? parseClientScopeList(currentUser.clientName).join(", ")
+    : selectedClientName;
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -1084,7 +1116,7 @@ function AccessSummary({ currentUser, selectedClientName }) {
         <div className="rounded-2xl bg-slate-50 p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Access Scope</div>
           <div className="mt-2 text-lg font-semibold text-slate-900">
-            {currentUser.role === "client" ? currentUser.clientName : selectedClientName}
+            {clientScopeLabel || "All Clients"}
           </div>
         </div>
         <div className="rounded-2xl bg-slate-50 p-4">
@@ -1963,6 +1995,22 @@ function PlannedPostsPanel({ rows }) {
 }
 
 function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDelete, busy }) {
+  const [selectedPlatform, setSelectedPlatform] = useState("All Platforms");
+  const platformOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.platform).filter(Boolean))).sort(),
+    [rows]
+  );
+  const filteredRows = useMemo(() => {
+    if (selectedPlatform === "All Platforms") return rows;
+    return rows.filter((row) => row.platform === selectedPlatform);
+  }, [rows, selectedPlatform]);
+
+  useEffect(() => {
+    if (selectedPlatform !== "All Platforms" && !platformOptions.includes(selectedPlatform)) {
+      setSelectedPlatform("All Platforms");
+    }
+  }, [platformOptions, selectedPlatform]);
+
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="mb-5 flex items-center justify-between">
@@ -1970,14 +2018,43 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
           <h3 className="text-xl font-semibold text-slate-900">Planned Log</h3>
           <p className="text-sm text-slate-500">This is the backend record of all planned items captured from the planned interface. You can still edit, update, and push entries into the execution status log here.</p>
         </div>
-        <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{rows.length} Planned</div>
+        <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{filteredRows.length} Planned</div>
+      </div>
+      <div className="mb-5 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setSelectedPlatform("All Platforms")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            selectedPlatform === "All Platforms"
+              ? "bg-slate-900 text-white"
+              : "border border-slate-200 bg-white text-slate-700"
+          }`}
+        >
+          All Platforms
+        </button>
+        {platformOptions.map((platform) => (
+          <button
+            key={platform}
+            type="button"
+            onClick={() => setSelectedPlatform(platform)}
+            className={`rounded-full px-4 py-2 text-sm font-semibold ${
+              selectedPlatform === platform
+                ? "bg-slate-900 text-white"
+                : "border border-slate-200 bg-white text-slate-700"
+            }`}
+          >
+            {platform}
+          </button>
+        ))}
       </div>
       <div className="space-y-4">
-        {rows.length === 0 ? (
+        {filteredRows.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
-            No planned log entries yet. Use the planner to create your first post.
+            {rows.length === 0
+              ? "No planned log entries yet. Use the planner to create your first post."
+              : "No planned entries match this platform yet."}
           </div>
-        ) : rows.map((plan) => {
+        ) : filteredRows.map((plan) => {
           const planKey = getPlanKey(plan);
           return (
             <div key={plan.id} className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 shadow-sm">
@@ -2485,7 +2562,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   const [statusRecords, setStatusRecords] = useState(() => readStoredItems(STATUS_STORAGE_KEY, DEFAULT_STATUS_RECORDS).map(withStatusId));
   const [editingPlanId, setEditingPlanId] = useState(null);
   const [snapshotView, setSnapshotView] = useState("weekly");
-  const [statusDrafts, setStatusDrafts] = useState({});
+  const [statusDrafts, setStatusDrafts] = useState(() => readStoredObject(STATUS_DRAFTS_STORAGE_KEY, {}));
   const [notice, setNotice] = useState("Ready for deployment.");
   const [isClientView, setIsClientView] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -2515,13 +2592,19 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     }
   }, [currentUser, sharedModeReady]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STATUS_DRAFTS_STORAGE_KEY, JSON.stringify(statusDrafts));
+  }, [statusDrafts]);
+
   const accessibleClientNames = useMemo(() => getAccessibleClientNames(plans), [plans]);
 
   useEffect(() => {
     if (!currentUser) return;
     if (currentUser.role === "client") {
       setIsClientView(true);
-      setSelectedClientName(currentUser.clientName || "All Clients");
+      const scopes = parseClientScopeList(currentUser.clientName);
+      setSelectedClientName(scopes.length <= 1 ? (scopes[0] || "All Clients") : "All Clients");
     } else if (!accessibleClientNames.includes(selectedClientName) && selectedClientName !== "All Clients") {
       setSelectedClientName("All Clients");
     }
@@ -2602,8 +2685,14 @@ export default function ClientSocialMediaPostingTrackerInterface() {
         .order("date", { ascending: true });
 
       if (user.role === "client" && user.clientName) {
-        planQuery = planQuery.eq("client_name", user.clientName);
-        statusQuery = statusQuery.eq("client_name", user.clientName);
+        const clientScopes = parseClientScopeList(user.clientName);
+        if (clientScopes.length === 1) {
+          planQuery = planQuery.eq("client_name", clientScopes[0]);
+          statusQuery = statusQuery.eq("client_name", clientScopes[0]);
+        } else if (clientScopes.length > 1) {
+          planQuery = planQuery.in("client_name", clientScopes);
+          statusQuery = statusQuery.in("client_name", clientScopes);
+        }
       }
 
       const remoteRequests = [planQuery, statusQuery];
@@ -2664,7 +2753,10 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   const filteredPlans = useMemo(() => {
     if (!currentUser) return [];
     if (currentUser.role === "client") {
-      return plans.filter((plan) => plan.clientName === currentUser.clientName);
+      const clientScopes = parseClientScopeList(currentUser.clientName);
+      const scopedPlans = plans.filter((plan) => clientScopes.includes(plan.clientName));
+      if (selectedClientName === "All Clients") return scopedPlans;
+      return scopedPlans.filter((plan) => plan.clientName === selectedClientName);
     }
     if (selectedClientName === "All Clients") return plans;
     return plans.filter((plan) => plan.clientName === selectedClientName);
@@ -2673,7 +2765,10 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   const filteredStatusRecords = useMemo(() => {
     if (!currentUser) return [];
     if (currentUser.role === "client") {
-      return statusRecords.filter((record) => record.clientName === currentUser.clientName);
+      const clientScopes = parseClientScopeList(currentUser.clientName);
+      const scopedRecords = statusRecords.filter((record) => clientScopes.includes(record.clientName));
+      if (selectedClientName === "All Clients") return scopedRecords;
+      return scopedRecords.filter((record) => record.clientName === selectedClientName);
     }
     if (selectedClientName === "All Clients") return statusRecords;
     return statusRecords.filter((record) => record.clientName === selectedClientName);
@@ -2892,6 +2987,11 @@ export default function ClientSocialMediaPostingTrackerInterface() {
           if (error) throw error;
         }
 
+        setStatusDrafts((prev) => {
+          const next = { ...prev };
+          delete next[planKey];
+          return next;
+        });
         setNotice(`Saved update for ${plan.platform} | ${plan.topic}`);
         await loadRemoteData(currentUser);
       } catch (error) {
@@ -2924,6 +3024,11 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       const existingIndex = prev.findIndex((item) => item.planId === plan.id);
       if (existingIndex >= 0) return prev.map((item, index) => (index === existingIndex ? { ...entry, id: item.id } : item));
       return [entry, ...prev];
+    });
+    setStatusDrafts((prev) => {
+      const next = { ...prev };
+      delete next[planKey];
+      return next;
     });
     setNotice(`Saved update for ${plan.platform} | ${plan.topic}`);
   }
@@ -3209,7 +3314,15 @@ export default function ClientSocialMediaPostingTrackerInterface() {
           currentUser={currentUser}
           selectedClientName={selectedClientName}
           onSelectClient={setSelectedClientName}
-          clientOptions={canViewMultipleClients(currentUser) ? accessibleClientNames : currentUser.clientName ? [currentUser.clientName] : []}
+          clientOptions={
+            currentUser?.role === "client"
+              ? parseClientScopeList(currentUser.clientName)
+              : canViewMultipleClients(currentUser)
+                ? accessibleClientNames
+                : currentUser.clientName
+                  ? [currentUser.clientName]
+                  : []
+          }
           onLogout={handleLogout}
         />
         <AppNotice message={notice} />
