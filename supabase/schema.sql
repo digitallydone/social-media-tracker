@@ -49,6 +49,13 @@ create table if not exists public.status_records (
   updated_at timestamptz not null default now()
 );
 
+alter table public.status_records add column if not exists reach integer;
+alter table public.status_records add column if not exists impressions integer;
+alter table public.status_records add column if not exists likes integer;
+alter table public.status_records add column if not exists comments integer;
+alter table public.status_records add column if not exists shares integer;
+alter table public.status_records add column if not exists clicks integer;
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql

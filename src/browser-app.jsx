@@ -52,6 +52,12 @@ const EMPTY_STATUS_DRAFT = {
   status: "",
   postLink: "",
   notes: "",
+  reach: "",
+  impressions: "",
+  likes: "",
+  comments: "",
+  shares: "",
+  clicks: "",
 };
 
 const EMPTY_INVITE_FORM = {
@@ -130,6 +136,12 @@ const DEFAULT_STATUS_RECORDS = [
     status: "Posted",
     postLink: "https://example.com/post/1",
     notes: "Published successfully",
+    reach: 12400,
+    impressions: 28900,
+    likes: 1840,
+    comments: 126,
+    shares: 72,
+    clicks: 418,
   }),
   withStatusId({
     planId: DEFAULT_PLANS[1].id,
@@ -142,6 +154,12 @@ const DEFAULT_STATUS_RECORDS = [
     status: "Awaiting Approval",
     postLink: "",
     notes: "Waiting for client feedback",
+    reach: null,
+    impressions: null,
+    likes: null,
+    comments: null,
+    shares: null,
+    clicks: null,
   }),
   withStatusId({
     planId: DEFAULT_PLANS[2].id,
@@ -154,6 +172,12 @@ const DEFAULT_STATUS_RECORDS = [
     status: "Rescheduled",
     postLink: "",
     notes: "Reshoot moved to next week",
+    reach: null,
+    impressions: null,
+    likes: null,
+    comments: null,
+    shares: null,
+    clicks: null,
   }),
   withStatusId({
     planId: DEFAULT_PLANS[3].id,
@@ -166,6 +190,12 @@ const DEFAULT_STATUS_RECORDS = [
     status: "Posted",
     postLink: "https://example.com/post/4",
     notes: "Posted from founder profile",
+    reach: 8200,
+    impressions: 19200,
+    likes: 640,
+    comments: 38,
+    shares: 19,
+    clicks: 211,
   }),
 ];
 
@@ -220,6 +250,31 @@ function formatTimeLabel(time) {
 function normalizeUrl(url) {
   if (!url) return "";
   return url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
+}
+
+function parseMetricValue(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed);
+}
+
+function formatMetricValue(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "-";
+  return parsed.toLocaleString();
+}
+
+function getEngagementTotal(record) {
+  return (Number(record?.likes) || 0) + (Number(record?.comments) || 0) + (Number(record?.shares) || 0);
+}
+
+function hasPerformanceMetrics(record) {
+  return ["reach", "impressions", "likes", "comments", "shares", "clicks"].some((key) => {
+    const value = record?.[key];
+    return value !== null && value !== undefined && value !== "";
+  });
 }
 
 function getStatusStyle(status) {
@@ -537,6 +592,12 @@ function mapDbStatus(row) {
     status: row.status,
     postLink: row.post_link || "",
     notes: row.notes || "",
+    reach: row.reach ?? null,
+    impressions: row.impressions ?? null,
+    likes: row.likes ?? null,
+    comments: row.comments ?? null,
+    shares: row.shares ?? null,
+    clicks: row.clicks ?? null,
   });
 }
 
@@ -566,6 +627,12 @@ function toDbStatus(plan, draft, actorId) {
     status: draft.status,
     post_link: draft.postLink.trim() || null,
     notes: draft.notes.trim() || null,
+    reach: parseMetricValue(draft.reach),
+    impressions: parseMetricValue(draft.impressions),
+    likes: parseMetricValue(draft.likes),
+    comments: parseMetricValue(draft.comments),
+    shares: parseMetricValue(draft.shares),
+    clicks: parseMetricValue(draft.clicks),
     created_by: actorId,
     updated_by: actorId,
   };
@@ -1355,6 +1422,35 @@ function CalendarPostDetailsDialog({ post, onClose }) {
         <div className="mt-3 text-sm leading-7 text-slate-700">{post.detailNotes || "No planning notes were added."}</div>
       </div>
 
+      {hasPerformanceMetrics(post) && (
+        <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Performance Snapshot</div>
+              <div className="mt-1 text-sm text-slate-500">A simple post-level view of how this content performed.</div>
+            </div>
+            <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+              Engagement {formatMetricValue(getEngagementTotal(post))}
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+            {[
+              { label: "Reach", value: post.reach },
+              { label: "Impressions", value: post.impressions },
+              { label: "Likes", value: post.likes },
+              { label: "Comments", value: post.comments },
+              { label: "Shares", value: post.shares },
+              { label: "Clicks", value: post.clicks },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
+                <div className="mt-2 text-2xl font-semibold text-slate-900">{formatMetricValue(item.value)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {post.currentStatus === "Posted" && post.currentPostLink && (
         <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Published Link</div>
@@ -1582,6 +1678,246 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
   );
 }
 
+function PerformanceDashboard({ rows, monthDate, isClientView = false }) {
+  const postedRows = useMemo(
+    () => rows.filter((row) => row.currentStatus === "Posted" && hasPerformanceMetrics(row)),
+    [rows]
+  );
+
+  const totals = useMemo(() => {
+    return postedRows.reduce(
+      (acc, row) => {
+        acc.reach += Number(row.reach) || 0;
+        acc.impressions += Number(row.impressions) || 0;
+        acc.likes += Number(row.likes) || 0;
+        acc.comments += Number(row.comments) || 0;
+        acc.shares += Number(row.shares) || 0;
+        acc.clicks += Number(row.clicks) || 0;
+        return acc;
+      },
+      { reach: 0, impressions: 0, likes: 0, comments: 0, shares: 0, clicks: 0 }
+    );
+  }, [postedRows]);
+
+  const engagementTotal = totals.likes + totals.comments + totals.shares;
+  const averageEngagement = postedRows.length ? Math.round(engagementTotal / postedRows.length) : 0;
+
+  const topPost = useMemo(() => {
+    return postedRows.reduce((best, row) => {
+      if (!best) return row;
+      return getEngagementTotal(row) > getEngagementTotal(best) ? row : best;
+    }, null);
+  }, [postedRows]);
+
+  const topPlatform = useMemo(() => {
+    const grouped = {};
+    postedRows.forEach((row) => {
+      if (!grouped[row.platform]) {
+        grouped[row.platform] = { platform: row.platform, engagement: 0, clicks: 0, posts: 0 };
+      }
+      grouped[row.platform].engagement += getEngagementTotal(row);
+      grouped[row.platform].clicks += Number(row.clicks) || 0;
+      grouped[row.platform].posts += 1;
+    });
+    return Object.values(grouped).sort((a, b) => b.engagement - a.engagement)[0] || null;
+  }, [postedRows]);
+
+  const leaderboard = useMemo(() => {
+    return [...postedRows]
+      .sort((a, b) => getEngagementTotal(b) - getEngagementTotal(a))
+      .slice(0, 4);
+  }, [postedRows]);
+
+  const monthLabel = formatMonthLabel(monthDate);
+
+  return (
+    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            {isClientView ? "Client Dashboard" : "Performance Dashboard"}
+          </p>
+          <h3 className="mt-2 text-2xl font-semibold text-slate-900">Performance Overview</h3>
+          <p className="mt-2 max-w-2xl text-sm text-slate-500">
+            A clean monthly view of content results for {monthLabel}, designed to keep reporting understandable at a glance.
+          </p>
+        </div>
+        <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
+          {postedRows.length} posted item{postedRows.length === 1 ? "" : "s"} with metrics
+        </div>
+      </div>
+
+      {postedRows.length === 0 ? (
+        <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+          No performance metrics recorded for this month yet. Save a posted update with metrics to start building client-friendly reporting.
+        </div>
+      ) : (
+        <div className="mt-6 space-y-6">
+          <div className="grid gap-4 xl:grid-cols-[1.15fr,0.85fr]">
+            <div className="overflow-hidden rounded-[1.75rem] bg-[radial-gradient(circle_at_top_left,_rgba(125,211,252,0.18),_transparent_34%),linear-gradient(135deg,#0f172a,#172554_58%,#1d4ed8)] p-6 text-white shadow-sm">
+              <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-100">
+                    Reporting Focus
+                  </div>
+                  <h4 className="mt-4 text-3xl font-semibold">{formatMetricValue(totals.impressions)}</h4>
+                  <p className="mt-2 text-sm text-slate-200">Total impressions generated across posted content this month.</p>
+                </div>
+                <div className="rounded-3xl border border-white/15 bg-white/10 px-5 py-4 text-right backdrop-blur">
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-200">Avg Engagement</div>
+                  <div className="mt-2 text-4xl font-semibold">{formatMetricValue(averageEngagement)}</div>
+                </div>
+              </div>
+              <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[
+                  { label: "Reach", value: totals.reach },
+                  { label: "Clicks", value: totals.clicks },
+                  { label: "Likes", value: totals.likes },
+                  { label: "Shares", value: totals.shares },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200">{item.label}</div>
+                    <div className="mt-2 text-2xl font-semibold text-white">{formatMetricValue(item.value)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Top Post</div>
+                {topPost ? (
+                  <>
+                    <h4 className="mt-3 text-lg font-semibold text-slate-900">{topPost.topic || "Planned Post"}</h4>
+                    <p className="mt-1 text-sm text-slate-500">{topPost.platform} · {topPost.clientName}</p>
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+                      <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700">
+                        Reach {formatMetricValue(topPost.reach)}
+                      </span>
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
+                        Engagement {formatMetricValue(getEngagementTotal(topPost))}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-500">No top post available yet.</p>
+                )}
+              </div>
+
+              <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Strongest Platform</div>
+                {topPlatform ? (
+                  <>
+                    <h4 className="mt-3 text-lg font-semibold text-slate-900">{topPlatform.platform}</h4>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {formatMetricValue(topPlatform.engagement)} engagement across {topPlatform.posts} posted item{topPlatform.posts === 1 ? "" : "s"}.
+                    </p>
+                    <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-700">
+                      Clicks {formatMetricValue(topPlatform.clicks)}
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-500">No platform comparison available yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+            {[
+              { label: "Impressions", value: totals.impressions },
+              { label: "Reach", value: totals.reach },
+              { label: "Engagement", value: engagementTotal },
+              { label: "Clicks", value: totals.clicks },
+              { label: "Comments", value: totals.comments },
+              { label: "Shares", value: totals.shares },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
+                <div className="mt-3 text-3xl font-semibold text-slate-900">{formatMetricValue(item.value)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+            <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h4 className="text-lg font-semibold text-slate-900">Monthly Summary</h4>
+                <p className="mt-1 text-sm text-slate-500">A client-friendly summary generated from the current month’s posted content.</p>
+              </div>
+              <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                Ready for reporting
+              </div>
+            </div>
+            <div className="mt-4 grid gap-4 xl:grid-cols-3">
+              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Delivery</div>
+                <p className="mt-3 text-sm leading-7 text-slate-700">
+                  {postedRows.length} post{postedRows.length === 1 ? "" : "s"} went live in {monthLabel}, generating {formatMetricValue(totals.impressions)} impressions and {formatMetricValue(totals.reach)} reach.
+                </p>
+              </div>
+              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Audience Response</div>
+                <p className="mt-3 text-sm leading-7 text-slate-700">
+                  Engagement reached {formatMetricValue(engagementTotal)} across likes, comments, and shares, with an average of {formatMetricValue(averageEngagement)} per posted item.
+                </p>
+              </div>
+              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Standout Insight</div>
+                <p className="mt-3 text-sm leading-7 text-slate-700">
+                  {topPlatform
+                    ? `${topPlatform.platform} led the month on engagement, while ${topPost?.topic || "the top post"} stood out as the strongest individual content piece.`
+                    : "Add more posted content with metrics to unlock stronger platform and post-level comparisons."}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-lg font-semibold text-slate-900">Top Content This Month</h4>
+                <p className="mt-1 text-sm text-slate-500">A simple leaderboard to support client reporting and next-step decisions.</p>
+              </div>
+              <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                {leaderboard.length} Highlight{leaderboard.length === 1 ? "" : "s"}
+              </div>
+            </div>
+            <div className="mt-4 grid gap-4 xl:grid-cols-2">
+              {leaderboard.map((row, index) => (
+                <div key={row.id} className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        #{index + 1} Performer
+                      </div>
+                      <h5 className="mt-2 text-lg font-semibold text-slate-900">{row.topic || "Planned Post"}</h5>
+                      <p className="mt-1 text-sm text-slate-500">{row.platform} · {row.clientName}</p>
+                    </div>
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      {formatMetricValue(getEngagementTotal(row))} engagement
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Impressions</div>
+                      <div className="mt-2 text-xl font-semibold text-slate-900">{formatMetricValue(row.impressions)}</div>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Clicks</div>
+                      <div className="mt-2 text-xl font-semibold text-slate-900">{formatMetricValue(row.clicks)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PlannedPostsPanel({ rows }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1683,6 +2019,29 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
                   <div className="text-xs uppercase tracking-wide text-slate-400">Update Notes</div>
                   <textarea value={plan.draftNotes} onChange={(e) => onDraftChange(planKey, "notes", e.target.value)} rows={2} placeholder="Add update notes" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" />
                 </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-400">Performance Metrics</div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {[
+                      ["reach", "Reach"],
+                      ["impressions", "Impressions"],
+                      ["likes", "Likes"],
+                      ["comments", "Comments"],
+                      ["shares", "Shares"],
+                      ["clicks", "Clicks"],
+                    ].map(([field, label]) => (
+                      <input
+                        key={field}
+                        type="number"
+                        min="0"
+                        value={plan[`draft${field.charAt(0).toUpperCase()}${field.slice(1)}`] ?? ""}
+                        onChange={(e) => onDraftChange(planKey, field, e.target.value)}
+                        placeholder={label}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
@@ -1699,12 +2058,12 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
         <table className="min-w-full border-separate border-spacing-y-3">
           <thead>
             <tr className="text-left text-sm text-slate-500">
-              <th className="px-4">Date</th><th className="px-4">Platform</th><th className="px-4">Topic</th><th className="px-4">Format</th><th className="px-4">Time</th><th className="px-4">Current Status</th><th className="px-4">Update Status</th><th className="px-4">Post Link</th><th className="px-4">Update Notes</th><th className="px-4">Actions</th>
+              <th className="px-4">Date</th><th className="px-4">Platform</th><th className="px-4">Topic</th><th className="px-4">Format</th><th className="px-4">Time</th><th className="px-4">Current Status</th><th className="px-4">Update Status</th><th className="px-4">Post Link</th><th className="px-4">Update Notes</th><th className="px-4">Performance</th><th className="px-4">Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr className="bg-slate-50"><td colSpan={10} className="rounded-2xl px-4 py-8 text-center text-sm text-slate-500">No planned log entries yet. Use the planner to create your first post.</td></tr>
+              <tr className="bg-slate-50"><td colSpan={11} className="rounded-2xl px-4 py-8 text-center text-sm text-slate-500">No planned log entries yet. Use the planner to create your first post.</td></tr>
             ) : rows.map((plan) => {
               const planKey = getPlanKey(plan);
               return (
@@ -1726,6 +2085,28 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
                     {plan.currentPostLink && <a href={normalizeUrl(plan.currentPostLink)} target="_blank" rel="noreferrer" className="mt-2 block text-xs font-semibold text-slate-700 underline">Current Link</a>}
                   </td>
                   <td className="px-4 py-4 text-sm text-slate-700"><textarea value={plan.draftNotes} onChange={(e) => onDraftChange(planKey, "notes", e.target.value)} rows={2} placeholder="Add update notes" className="w-44 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" /></td>
+                  <td className="px-4 py-4 text-sm text-slate-700">
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        ["reach", "Reach"],
+                        ["impressions", "Impressions"],
+                        ["likes", "Likes"],
+                        ["comments", "Comments"],
+                        ["shares", "Shares"],
+                        ["clicks", "Clicks"],
+                      ].map(([field, label]) => (
+                        <input
+                          key={field}
+                          type="number"
+                          min="0"
+                          value={plan[`draft${field.charAt(0).toUpperCase()}${field.slice(1)}`] ?? ""}
+                          onChange={(e) => onDraftChange(planKey, field, e.target.value)}
+                          placeholder={label}
+                          className="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
+                        />
+                      ))}
+                    </div>
+                  </td>
                   <td className="rounded-r-2xl px-4 py-4 text-sm font-medium text-slate-700">
                     <div className="flex flex-wrap gap-2">
                       <button type="button" disabled={busy} onClick={() => onSaveUpdate(plan)} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">Save Update</button>
@@ -1772,6 +2153,13 @@ function ExecutionStatusTable({ rows }) {
               <div><div className="text-xs uppercase tracking-wide text-slate-400">Time</div><div className="mt-1 font-medium text-slate-800">{formatTimeLabel(record.time)}</div></div>
             </div>
             <div className="mt-4 text-sm text-slate-700">{record.notes || "-"}</div>
+            {hasPerformanceMetrics(record) && (
+              <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">Impressions {formatMetricValue(record.impressions)}</span>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">Engagement {formatMetricValue(getEngagementTotal(record))}</span>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">Clicks {formatMetricValue(record.clicks)}</span>
+              </div>
+            )}
             {record.postLink && (
               <a href={normalizeUrl(record.postLink)} className="mt-4 inline-flex rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 underline underline-offset-4" target="_blank" rel="noreferrer">
                 View Post
@@ -1783,10 +2171,10 @@ function ExecutionStatusTable({ rows }) {
 
       <div className="hidden overflow-x-auto md:block">
         <table className="min-w-full border-separate border-spacing-y-3">
-          <thead><tr className="text-left text-sm text-slate-500"><th className="px-4">Date</th><th className="px-4">Platform</th><th className="px-4">Topic</th><th className="px-4">Status</th><th className="px-4">Time</th><th className="px-4">Link</th><th className="px-4">Notes</th></tr></thead>
+          <thead><tr className="text-left text-sm text-slate-500"><th className="px-4">Date</th><th className="px-4">Platform</th><th className="px-4">Topic</th><th className="px-4">Status</th><th className="px-4">Time</th><th className="px-4">Performance</th><th className="px-4">Link</th><th className="px-4">Notes</th></tr></thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr className="bg-slate-50"><td colSpan={7} className="rounded-2xl px-4 py-8 text-center text-sm text-slate-500">No execution updates yet. Saved updates from the planned log will appear here.</td></tr>
+              <tr className="bg-slate-50"><td colSpan={8} className="rounded-2xl px-4 py-8 text-center text-sm text-slate-500">No execution updates yet. Saved updates from the planned log will appear here.</td></tr>
             ) : rows.map((record) => (
               <tr key={record.id} className="bg-slate-50">
                 <td className="rounded-l-2xl px-4 py-4 text-sm font-medium text-slate-900">{formatDateLabel(record.date)}</td>
@@ -1794,6 +2182,15 @@ function ExecutionStatusTable({ rows }) {
                 <td className="px-4 py-4 text-sm text-slate-700">{record.topic || "-"}</td>
                 <td className="px-4 py-4 text-sm"><span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(record.status)}`}>{record.status}</span></td>
                 <td className="px-4 py-4 text-sm text-slate-700">{formatTimeLabel(record.time)}</td>
+                <td className="px-4 py-4 text-sm text-slate-700">
+                  {hasPerformanceMetrics(record) ? (
+                    <div className="space-y-1 text-xs font-semibold">
+                      <div>Imp {formatMetricValue(record.impressions)}</div>
+                      <div>Eng {formatMetricValue(getEngagementTotal(record))}</div>
+                      <div>Clk {formatMetricValue(record.clicks)}</div>
+                    </div>
+                  ) : "-"}
+                </td>
                 <td className="px-4 py-4 text-sm font-medium text-slate-700">{record.postLink ? <a href={normalizeUrl(record.postLink)} className="text-slate-900 underline underline-offset-4" target="_blank" rel="noreferrer">View Post</a> : "-"}</td>
                 <td className="rounded-r-2xl px-4 py-4 text-sm text-slate-700">{record.notes || "-"}</td>
               </tr>
@@ -2546,6 +2943,12 @@ function ClientSocialMediaPostingTrackerInterface() {
       status: draft.status,
       postLink: draft.postLink.trim(),
       notes: draft.notes.trim(),
+      reach: parseMetricValue(draft.reach),
+      impressions: parseMetricValue(draft.impressions),
+      likes: parseMetricValue(draft.likes),
+      comments: parseMetricValue(draft.comments),
+      shares: parseMetricValue(draft.shares),
+      clicks: parseMetricValue(draft.clicks),
     });
     setStatusRecords((prev) => {
       const existingIndex = prev.findIndex((item) => item.planId === plan.id);
@@ -2610,16 +3013,30 @@ function ClientSocialMediaPostingTrackerInterface() {
       const draft = statusDrafts[getPlanKey(plan)] || null;
       const currentStatus = matchingStatus?.status || (overdue ? "Overdue" : "-");
       const shouldUseStatusNotes = ["Posted", "Awaiting Approval", "Rescheduled", "Missed"].includes(currentStatus);
+      const metricFields = ["reach", "impressions", "likes", "comments", "shares", "clicks"];
+      const draftMetrics = Object.fromEntries(
+        metricFields.map((field) => [
+          `draft${field.charAt(0).toUpperCase()}${field.slice(1)}`,
+          draft?.[field] ?? matchingStatus?.[field] ?? "",
+        ])
+      );
       return {
         ...plan,
         currentStatus,
         currentPostLink: matchingStatus?.postLink || "",
+        reach: matchingStatus?.reach ?? null,
+        impressions: matchingStatus?.impressions ?? null,
+        likes: matchingStatus?.likes ?? null,
+        comments: matchingStatus?.comments ?? null,
+        shares: matchingStatus?.shares ?? null,
+        clicks: matchingStatus?.clicks ?? null,
         detailNotes: shouldUseStatusNotes
           ? (matchingStatus?.notes || plan.notes || "")
           : (plan.notes || ""),
         draftStatus: draft?.status ?? matchingStatus?.status ?? "",
         draftPostLink: draft?.postLink ?? matchingStatus?.postLink ?? "",
         draftNotes: draft?.notes ?? matchingStatus?.notes ?? "",
+        ...draftMetrics,
       };
     });
   }, [monthFilteredPlans, monthFilteredStatusRecords, statusDrafts, activeDataMonth]);
@@ -2873,7 +3290,7 @@ function ClientSocialMediaPostingTrackerInterface() {
           )}
 
           <div className="space-y-8">
-            {canEdit(currentUser) && (
+            {canEdit(currentUser) && !isClientView && (
               <DeploymentTools
                 onExport={handleExportBackup}
                 onImport={handleImportBackup}
@@ -2890,19 +3307,35 @@ function ClientSocialMediaPostingTrackerInterface() {
                 }}
               />
             )}
-            <MonthScopeControls
-              monthDate={activeDataMonth}
-              onChangeMonth={setActiveDataMonth}
-              onPreviousMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, -1))}
-              onNextMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, 1))}
-              onGoToCurrentMonth={() => setActiveDataMonth(getMonthStart(new Date()))}
-            />
-            {isClientView && <StatCards stats={stats} />}
+            {!isClientView && (
+              <MonthScopeControls
+                monthDate={activeDataMonth}
+                onChangeMonth={setActiveDataMonth}
+                onPreviousMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, -1))}
+                onNextMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, 1))}
+                onGoToCurrentMonth={() => setActiveDataMonth(getMonthStart(new Date()))}
+              />
+            )}
+            {isClientView && (
+              <>
+                <PerformanceDashboard rows={mergedPlanRows} monthDate={activeDataMonth} isClientView />
+                <StatCards stats={stats} />
+                <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />
+                <MonthScopeControls
+                  monthDate={activeDataMonth}
+                  onChangeMonth={setActiveDataMonth}
+                  onPreviousMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, -1))}
+                  onNextMonth={() => setActiveDataMonth((prev) => shiftMonth(prev, 1))}
+                  onGoToCurrentMonth={() => setActiveDataMonth(getMonthStart(new Date()))}
+                />
+              </>
+            )}
             {!isClientView && canEdit(currentUser) && (
               <PlannedContentTable rows={mergedPlanRows} onDraftChange={updateDraft} onSaveUpdate={saveDraftToStatusLog} onEdit={handleEditPlan} onDelete={handleDeletePlan} busy={busy} />
             )}
             {!isClientView && <ExecutionStatusTable rows={summaryStatusRecords} />}
             {!isClientView && <StatCards stats={stats} />}
+            {!isClientView && <PerformanceDashboard rows={mergedPlanRows} monthDate={activeDataMonth} />}
             <CalendarView
               rows={mergedPlanRows}
               monthDate={calendarMonth}
@@ -2918,7 +3351,24 @@ function ClientSocialMediaPostingTrackerInterface() {
               }}
               compact
             />
-            <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />
+            {canEdit(currentUser) && isClientView && (
+              <DeploymentTools
+                onExport={handleExportBackup}
+                onImport={handleImportBackup}
+                onResetData={handleResetData}
+                hasData={plans.length > 0 || statusRecords.length > 0}
+                isClientView={isClientView}
+                sharedModeReady={sharedModeReady}
+                onToggleClientView={() => {
+                  const next = !isClientView;
+                  setIsClientView(next);
+                  if (!next) setSelectedCalendarPost(null);
+                  setSelectedCalendarOverflow(null);
+                  setNotice(next ? "Client view enabled." : "Admin view enabled.");
+                }}
+              />
+            )}
+            {!isClientView && <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />}
           </div>
         </div>
       </div>
