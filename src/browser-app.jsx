@@ -4429,6 +4429,39 @@ function ClientSocialMediaPostingTrackerInterface() {
     ];
   }, [monthFilteredPlans, mergedPlanRows, overallExecutionScore]);
 
+  const calendarMergedPlanRows = useMemo(
+    () => allMergedPlanRows.filter((plan) => isSameMonth(plan.date, calendarMonth)),
+    [allMergedPlanRows, calendarMonth]
+  );
+
+  const calendarExecutionScore = useMemo(
+    () => calculateExecutionScore(
+      calendarMergedPlanRows.length,
+      calendarMergedPlanRows.filter((item) => item.currentStatus === "Posted").length
+    ),
+    [calendarMergedPlanRows]
+  );
+
+  const calendarStats = useMemo(() => {
+    const counts = { planned: calendarMergedPlanRows.length, posted: 0, pending: 0, missed: 0, rescheduled: 0, overdue: 0 };
+    calendarMergedPlanRows.forEach((record) => {
+      if (record.currentStatus === "Posted") counts.posted += 1;
+      if (record.currentStatus === "Awaiting Approval") counts.pending += 1;
+      if (record.currentStatus === "Missed") counts.missed += 1;
+      if (record.currentStatus === "Rescheduled") counts.rescheduled += 1;
+      if (record.currentStatus === "Overdue") counts.overdue += 1;
+    });
+    return [
+      { label: "Planned", value: counts.planned },
+      { label: "Posted", value: counts.posted },
+      { label: "Pending", value: counts.pending },
+      { label: "Missed", value: counts.missed },
+      { label: "Rescheduled", value: counts.rescheduled },
+      { label: "Overdue", value: counts.overdue },
+      { label: "Score", value: `${calendarExecutionScore}%` },
+    ];
+  }, [calendarMergedPlanRows, calendarExecutionScore]);
+
   const dailySummary = useMemo(() => buildPeriodSummary(monthFilteredPlans, summaryStatusRecords, getDayKey), [monthFilteredPlans, summaryStatusRecords]);
   const weeklySummary = useMemo(() => buildPeriodSummary(monthFilteredPlans, summaryStatusRecords, getWeekKey), [monthFilteredPlans, summaryStatusRecords]);
   const monthlySummary = useMemo(() => buildPeriodSummary(monthFilteredPlans, summaryStatusRecords, getMonthKey), [monthFilteredPlans, summaryStatusRecords]);
@@ -4960,7 +4993,7 @@ function ClientSocialMediaPostingTrackerInterface() {
             )}
             {!isClientView && adminWorkspace === "calendar" && (
               <>
-                <StatCards stats={stats} />
+                <StatCards stats={calendarStats} />
                 <CalendarView
                   rows={allMergedPlanRows}
                   monthDate={calendarMonth}
