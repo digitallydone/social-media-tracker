@@ -494,7 +494,9 @@ function isSameMonth(dateValue, monthDate) {
 }
 
 function formatMonthLabel(date) {
-  return date.toLocaleDateString(undefined, {
+  const parsed = parseDateParts(date);
+  if (!parsed) return "No Date";
+  return new Date(parsed.year, parsed.month, 1).toLocaleDateString(undefined, {
     month: "long",
     year: "numeric",
   });
@@ -2647,25 +2649,42 @@ function PlannedPostsPanel({ rows }) {
   );
 }
 
-function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDelete, busy }) {
+function PlannedContentTable({
+  rows,
+  allRows = [],
+  monthDate,
+  onChangeMonth,
+  onPreviousMonth,
+  onNextMonth,
+  onGoToCurrentMonth,
+  onDraftChange,
+  onSaveUpdate,
+  onEdit,
+  onDelete,
+  busy,
+}) {
   const [selectedPlatform, setSelectedPlatform] = useState("All Platforms");
   const [selectedClient, setSelectedClient] = useState("All Clients");
+  const [selectedDate, setSelectedDate] = useState("");
   const [expandedPlanId, setExpandedPlanId] = useState(null);
+  const sourceRows = allRows.length ? allRows : rows;
   const platformOptions = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.platform).filter(Boolean))).sort(),
-    [rows]
+    () => Array.from(new Set(sourceRows.map((row) => row.platform).filter(Boolean))).sort(),
+    [sourceRows]
   );
   const clientOptions = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.clientName).filter(Boolean))).sort(),
-    [rows]
+    () => Array.from(new Set(sourceRows.map((row) => row.clientName).filter(Boolean))).sort(),
+    [sourceRows]
   );
   const filteredRows = useMemo(() => {
-    return rows.filter((row) => {
+    return sourceRows.filter((row) => {
+      const monthMatch = monthDate ? isSameMonth(row.date, monthDate) : true;
       const clientMatch = selectedClient === "All Clients" || row.clientName === selectedClient;
       const platformMatch = selectedPlatform === "All Platforms" || row.platform === selectedPlatform;
-      return clientMatch && platformMatch;
+      const dateMatch = !selectedDate || row.date === selectedDate;
+      return monthMatch && clientMatch && platformMatch && dateMatch;
     });
-  }, [rows, selectedClient, selectedPlatform]);
+  }, [sourceRows, monthDate, selectedClient, selectedPlatform, selectedDate]);
 
   useEffect(() => {
     if (selectedPlatform !== "All Platforms" && !platformOptions.includes(selectedPlatform)) {
@@ -2694,6 +2713,48 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
         </div>
         <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{filteredRows.length} Planned</div>
       </div>
+      {monthDate && (
+        <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Planned Log Month</div>
+              <div className="mt-2 text-lg font-semibold text-slate-900">{formatMonthLabel(monthDate)}</div>
+              <p className="mt-1 text-sm text-slate-500">Use month and date filters here to review the exact planning period you want.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev Month</button>
+              <input
+                type="month"
+                value={getMonthInputValue(monthDate)}
+                onChange={(event) => {
+                  const next = parseMonthInputValue(event.target.value);
+                  if (next) onChangeMonth?.(next);
+                }}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+              />
+              <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next Month</button>
+              <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Current Month</button>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+            />
+            {selectedDate && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate("")}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+              >
+                Clear Date
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <div className="mb-5 flex flex-wrap gap-2">
         <button
           type="button"
@@ -2753,7 +2814,7 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
             {rows.length === 0
               ? "No planned log entries yet. Use the planner to create your first post."
-              : "No planned entries match this platform yet."}
+              : "No planned entries match the current month, date, client, or platform filters."}
           </div>
         ) : filteredRows.map((plan) => {
           const planKey = getPlanKey(plan);
@@ -4441,7 +4502,32 @@ export default function ClientSocialMediaPostingTrackerInterface() {
               </>
             )}
             {!isClientView && canEdit(currentUser) && (
-              <PlannedContentTable rows={mergedPlanRows} onDraftChange={updateDraft} onSaveUpdate={saveDraftToStatusLog} onEdit={handleEditPlan} onDelete={handleDeletePlan} busy={busy} />
+              <PlannedContentTable
+                rows={mergedPlanRows}
+                allRows={allMergedPlanRows}
+                monthDate={activeDataMonth}
+                onChangeMonth={(value) => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth(value);
+                }}
+                onPreviousMonth={() => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth((prev) => shiftMonth(prev, -1));
+                }}
+                onNextMonth={() => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth((prev) => shiftMonth(prev, 1));
+                }}
+                onGoToCurrentMonth={() => {
+                  setReportingMonthPinned(false);
+                  setActiveDataMonth(getMonthStart(new Date()));
+                }}
+                onDraftChange={updateDraft}
+                onSaveUpdate={saveDraftToStatusLog}
+                onEdit={handleEditPlan}
+                onDelete={handleDeletePlan}
+                busy={busy}
+              />
             )}
             {!isClientView && <ExecutionStatusTable rows={summaryStatusRecords} />}
             {!isClientView && <StatCards stats={stats} />}
