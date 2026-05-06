@@ -5,6 +5,7 @@ const PLAN_STORAGE_KEY = "client-posting-tracker-plans";
 const STATUS_STORAGE_KEY = "client-posting-tracker-status-records";
 const SESSION_STORAGE_KEY = "client-posting-tracker-session";
 const STATUS_DRAFTS_STORAGE_KEY = "client-posting-tracker-status-drafts";
+const CLIENT_DIRECTORY_STORAGE_KEY = "client-posting-tracker-client-directory";
 
 const PLATFORM_OPTIONS = [
   "Instagram",
@@ -42,6 +43,7 @@ const DEMO_USERS = [
 
 const EMPTY_PLAN_FORM = {
   clientName: "",
+  campaign: "",
   date: "",
   platforms: ["Instagram"],
   platformFormats: { Instagram: "" },
@@ -54,6 +56,7 @@ const EMPTY_STATUS_DRAFT = {
   status: "",
   postLink: "",
   notes: "",
+  qualitativeNotes: "",
   reach: "",
   impressions: "",
   likes: "",
@@ -67,6 +70,11 @@ const EMPTY_INVITE_FORM = {
   fullName: "",
   role: "manager",
   clientName: "",
+};
+
+const EMPTY_CLIENT_FORM = {
+  name: "",
+  notes: "",
 };
 
 function createId(prefix = "item") {
@@ -90,6 +98,7 @@ function withStatusId(record) {
 const DEFAULT_PLANS = [
   withPlanId({
     clientName: "Acme Client",
+    campaign: "Launch Week",
     date: "2026-05-01",
     platform: "Instagram",
     topic: "Product Highlight",
@@ -99,6 +108,7 @@ const DEFAULT_PLANS = [
   }),
   withPlanId({
     clientName: "Acme Client",
+    campaign: "Trust Stories",
     date: "2026-05-02",
     platform: "Facebook",
     topic: "Customer Testimonial",
@@ -108,6 +118,7 @@ const DEFAULT_PLANS = [
   }),
   withPlanId({
     clientName: "Acme Client",
+    campaign: "Behind The Brand",
     date: "2026-06-04",
     platform: "TikTok",
     topic: "Behind the Scenes",
@@ -117,6 +128,7 @@ const DEFAULT_PLANS = [
   }),
   withPlanId({
     clientName: "Beta Foods",
+    campaign: "Leadership Voice",
     date: "2026-05-03",
     platform: "LinkedIn",
     topic: "Founder Message",
@@ -130,6 +142,7 @@ const DEFAULT_STATUS_RECORDS = [
   withStatusId({
     planId: DEFAULT_PLANS[0].id,
     clientName: "Acme Client",
+    campaign: "Launch Week",
     date: "2026-05-01",
     platform: "Instagram",
     topic: "Product Highlight",
@@ -148,6 +161,7 @@ const DEFAULT_STATUS_RECORDS = [
   withStatusId({
     planId: DEFAULT_PLANS[1].id,
     clientName: "Acme Client",
+    campaign: "Trust Stories",
     date: "2026-05-02",
     platform: "Facebook",
     topic: "Customer Testimonial",
@@ -166,6 +180,7 @@ const DEFAULT_STATUS_RECORDS = [
   withStatusId({
     planId: DEFAULT_PLANS[2].id,
     clientName: "Acme Client",
+    campaign: "Behind The Brand",
     date: "2026-06-04",
     platform: "TikTok",
     topic: "Behind the Scenes",
@@ -184,6 +199,7 @@ const DEFAULT_STATUS_RECORDS = [
   withStatusId({
     planId: DEFAULT_PLANS[3].id,
     clientName: "Beta Foods",
+    campaign: "Leadership Voice",
     date: "2026-05-03",
     platform: "LinkedIn",
     topic: "Founder Message",
@@ -290,6 +306,54 @@ function getEffectiveRowEngagementTotal(row) {
   return (getEffectiveMetricValue(row, "likes") || 0)
     + (getEffectiveMetricValue(row, "comments") || 0)
     + (getEffectiveMetricValue(row, "shares") || 0);
+}
+
+function getEffectiveQualitativeNotes(row) {
+  return (row?.draftQualitativeNotes || row?.qualitativeNotes || "").trim();
+}
+
+function getMostFrequentToken(values) {
+  const counts = {};
+  values.forEach((value) => {
+    const normalized = String(value || "").trim();
+    if (!normalized) return;
+    counts[normalized] = (counts[normalized] || 0) + 1;
+  });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}
+
+function buildQualitativeHighlights(rows, monthLabel) {
+  if (!rows.length) return [];
+
+  const notes = rows
+    .map((row) => getEffectiveQualitativeNotes(row))
+    .filter(Boolean);
+  const strongestRow = [...rows].sort((a, b) => getEffectiveRowEngagementTotal(b) - getEffectiveRowEngagementTotal(a))[0] || null;
+  const commonPlatform = getMostFrequentToken(rows.map((row) => row.platform));
+  const commonCampaign = getMostFrequentToken(rows.map((row) => row.campaign));
+
+  const highlights = [
+    {
+      label: "Performance Signal",
+      body: strongestRow
+        ? `${strongestRow.topic || "The leading post"} delivered the strongest engagement in ${monthLabel}, suggesting that ${strongestRow.platform || "this platform"} currently has the clearest audience pull.`
+        : `No standout post is available for ${monthLabel} yet.`,
+    },
+    {
+      label: "Channel Pattern",
+      body: commonPlatform
+        ? `${commonPlatform} appeared most often in the current reported set, making it the clearest platform to compare for repeatable performance cues this month.`
+        : `Channel concentration will become clearer as more posted items with metrics are saved.`,
+    },
+    {
+      label: "Narrative Cue",
+      body: notes.length
+        ? `${commonCampaign ? `${commonCampaign} is the most visible campaign thread, and ` : ""}qualitative notes indicate themes your client report can build on beyond raw metrics.`
+        : `Add qualitative performance notes to surface sentiment, creative learnings, and campaign context in this reporting view.`,
+    },
+  ];
+
+  return highlights;
 }
 
 function formatMetricValue(value) {
@@ -584,12 +648,14 @@ function buildMergedPlanRows(plans, statusRecords, statusDrafts) {
       comments: matchingStatus?.comments ?? null,
       shares: matchingStatus?.shares ?? null,
       clicks: matchingStatus?.clicks ?? null,
+      qualitativeNotes: matchingStatus?.qualitativeNotes || "",
       detailNotes: shouldUseStatusNotes
         ? (matchingStatus?.notes || plan.notes || "")
         : (plan.notes || ""),
       draftStatus: resolveStatusValue(draft?.status, matchingStatus?.status),
       draftPostLink: draft?.postLink ?? matchingStatus?.postLink ?? "",
       draftNotes: draft?.notes ?? matchingStatus?.notes ?? "",
+      draftQualitativeNotes: draft?.qualitativeNotes ?? matchingStatus?.qualitativeNotes ?? "",
       ...draftMetrics,
     };
   });
@@ -622,6 +688,10 @@ function formatDateKey(date) {
 
 function getAccessibleClientNames(plans) {
   return Array.from(new Set(plans.map((plan) => plan.clientName).filter(Boolean))).sort();
+}
+
+function getManagedClientNames(clients) {
+  return Array.from(new Set(clients.map((client) => client.name).filter(Boolean))).sort();
 }
 
 function parseClientScopeList(value) {
@@ -681,6 +751,7 @@ function mapDbPlan(row) {
   return withPlanId({
     id: row.id,
     clientName: row.client_name,
+    campaign: row.campaign || "",
     date: row.date,
     platform: row.platform,
     topic: row.topic,
@@ -695,6 +766,7 @@ function mapDbStatus(row) {
     id: row.id,
     planId: row.plan_id,
     clientName: row.client_name,
+    campaign: row.campaign || "",
     date: row.date,
     platform: row.platform,
     topic: row.topic,
@@ -703,6 +775,7 @@ function mapDbStatus(row) {
     status: row.status,
     postLink: row.post_link || "",
     notes: row.notes || "",
+    qualitativeNotes: row.qualitative_notes || "",
     reach: row.reach ?? null,
     impressions: row.impressions ?? null,
     likes: row.likes ?? null,
@@ -715,6 +788,7 @@ function mapDbStatus(row) {
 function toDbPlan(entry, actorId) {
   return {
     client_name: entry.clientName,
+    campaign: entry.campaign || null,
     date: entry.date,
     platform: entry.platform,
     topic: entry.topic,
@@ -730,6 +804,7 @@ function toDbStatus(plan, draft, actorId) {
   return {
     plan_id: plan.id,
     client_name: plan.clientName,
+    campaign: plan.campaign || null,
     date: plan.date,
     platform: plan.platform,
     topic: plan.topic,
@@ -738,6 +813,7 @@ function toDbStatus(plan, draft, actorId) {
     status: draft.status,
     post_link: draft.postLink.trim() || null,
     notes: draft.notes.trim() || null,
+    qualitative_notes: draft.qualitativeNotes?.trim() || null,
     reach: parseMetricValue(draft.reach),
     impressions: parseMetricValue(draft.impressions),
     likes: parseMetricValue(draft.likes),
@@ -755,6 +831,15 @@ function mapDbInvite(row) {
     fullName: row.full_name || "",
     role: row.role || "manager",
     clientName: row.client_name || "",
+    createdAt: row.created_at || "",
+  };
+}
+
+function mapDbClient(row) {
+  return {
+    id: row.id,
+    name: row.name || "",
+    notes: row.notes || "",
     createdAt: row.created_at || "",
   };
 }
@@ -1074,36 +1159,36 @@ function AccessManagementPanel({
               <label className="mb-2 block text-sm font-medium text-slate-700">Client Scope</label>
               <div className={`rounded-2xl border border-slate-200 bg-white p-3 ${inviteForm.role !== "client" ? "cursor-not-allowed bg-slate-100" : ""}`}>
                 {inviteForm.role === "client" ? (
-                  <>
-                    <div className="flex flex-wrap gap-2">
-                      {clientOptions.map((client) => {
-                        const selected = selectedClientScopes.includes(client);
-                        return (
-                          <button
-                            key={client}
-                            type="button"
-                            onClick={() => toggleClientScope(client)}
-                            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-                              selected
-                                ? "bg-slate-900 text-white"
-                                : "border border-slate-200 bg-white text-slate-700"
-                            }`}
-                          >
-                            {client}
-                          </button>
-                        );
-                      })}
+                  clientOptions.length > 0 ? (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        {clientOptions.map((client) => {
+                          const selected = selectedClientScopes.includes(client);
+                          return (
+                            <button
+                              key={client}
+                              type="button"
+                              onClick={() => toggleClientScope(client)}
+                              className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+                                selected
+                                  ? "bg-slate-900 text-white"
+                                  : "border border-slate-200 bg-white text-slate-700"
+                              }`}
+                            >
+                              {client}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">
+                        Select one or more brands from the client directory. Add new brands in Client Directory first so access stays clean and consistent.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="px-1 py-2 text-sm text-slate-500">
+                      Add brands in Client Directory first, then return here to assign client access.
                     </div>
-                    <input
-                      value={inviteForm.clientName}
-                      onChange={(event) => onInviteFormChange("clientName", event.target.value)}
-                      className="mt-3 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400"
-                      placeholder="Add extra brands as comma-separated names"
-                    />
-                    <p className="mt-2 text-xs text-slate-500">
-                      Select one or more brands above. You can also type additional brand names separated by commas.
-                    </p>
-                  </>
+                  )
                 ) : (
                   <div className="px-1 py-2 text-sm text-slate-400">Only required for client access</div>
                 )}
@@ -1159,6 +1244,100 @@ function AccessManagementPanel({
                       type="button"
                       disabled={inviteBusy}
                       onClick={() => onInviteDelete(invite.email)}
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClientDirectoryPanel({
+  clientForm,
+  onClientFormChange,
+  onClientSubmit,
+  onClientEdit,
+  onClientDelete,
+  clients,
+  busy,
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h3 className="text-xl font-semibold text-slate-900">Client Directory</h3>
+          <p className="mt-1 max-w-3xl text-sm text-slate-500">
+            Add client brands here first so planners, invites, and reporting all use the same clean client list.
+          </p>
+        </div>
+        <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
+          {clients.length} Clients
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(320px,1fr)_minmax(0,1.4fr)]">
+        <form onSubmit={onClientSubmit} className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">Client Brand Name</label>
+            <input
+              value={clientForm.name}
+              onChange={(event) => onClientFormChange("name", event.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+              placeholder="e.g. CarvinClay"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">Notes</label>
+            <textarea
+              value={clientForm.notes}
+              onChange={(event) => onClientFormChange("notes", event.target.value)}
+              rows={4}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+              placeholder="Optional notes about this client or brand"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {busy ? "Saving Client..." : "Save Client"}
+          </button>
+        </form>
+
+        <div className="space-y-4">
+          {clients.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+              No client brands have been added yet.
+            </div>
+          ) : (
+            clients.map((client) => (
+              <div key={client.id || client.name} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-lg font-semibold text-slate-900">{client.name}</div>
+                    <div className="mt-2 text-sm text-slate-500">{client.notes || "No notes added yet."}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onClientEdit(client)}
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onClientDelete(client)}
                       className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Remove
@@ -1296,6 +1475,7 @@ function MonthScopeControls({ monthDate, onChangeMonth, onPreviousMonth, onNextM
 
 function PlannedEntryForm({
   planForm,
+  clientOptions = [],
   editingPlanId,
   onPlanChange,
   onTogglePlatform,
@@ -1324,11 +1504,34 @@ function PlannedEntryForm({
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-700">Client Name</label>
+          {clientOptions.length > 0 ? (
+            <select
+              value={planForm.clientName}
+              onChange={(e) => onPlanChange("clientName", e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+            >
+              <option value="">Select client</option>
+              {clientOptions.map((client) => (
+                <option key={client} value={client}>{client}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={planForm.clientName}
+              onChange={(e) => onPlanChange("clientName", e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
+              placeholder="Add clients from Client Directory first"
+            />
+          )}
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-700">Campaign Topic</label>
           <input
-            value={planForm.clientName}
-            onChange={(e) => onPlanChange("clientName", e.target.value)}
+            value={planForm.campaign}
+            onChange={(e) => onPlanChange("campaign", e.target.value)}
             className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-            placeholder="Enter client name"
+            placeholder="e.g. Workers' Day Visibility"
           />
         </div>
 
@@ -1450,6 +1653,7 @@ function PlannedEntryForm({
 function EditPlanDialog({
   open,
   planForm,
+  clientOptions = [],
   editingPlanId,
   onPlanChange,
   onTogglePlatform,
@@ -1469,6 +1673,7 @@ function EditPlanDialog({
     >
       <PlannedEntryForm
         planForm={planForm}
+        clientOptions={clientOptions}
         editingPlanId={editingPlanId}
         onPlanChange={onPlanChange}
         onTogglePlatform={onTogglePlatform}
@@ -1839,39 +2044,86 @@ function PerformanceDashboard({
   onNextMonth,
   onGoToCurrentMonth,
 }) {
+  const [selectedPlatform, setSelectedPlatform] = useState("All Platforms");
+  const [selectedCampaign, setSelectedCampaign] = useState("All Campaigns");
+  const platformOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.platform).filter(Boolean))).sort(),
+    [rows]
+  );
+  const campaignOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.campaign).filter(Boolean))).sort(),
+    [rows]
+  );
+
+  useEffect(() => {
+    if (selectedPlatform !== "All Platforms" && !platformOptions.includes(selectedPlatform)) {
+      setSelectedPlatform("All Platforms");
+    }
+  }, [platformOptions, selectedPlatform]);
+
+  useEffect(() => {
+    if (selectedCampaign !== "All Campaigns" && !campaignOptions.includes(selectedCampaign)) {
+      setSelectedCampaign("All Campaigns");
+    }
+  }, [campaignOptions, selectedCampaign]);
+
+  const scopedRows = useMemo(
+    () => rows.filter((row) => {
+      const platformMatch = selectedPlatform === "All Platforms" || row.platform === selectedPlatform;
+      const campaignMatch = selectedCampaign === "All Campaigns" || row.campaign === selectedCampaign;
+      return platformMatch && campaignMatch;
+    }),
+    [rows, selectedPlatform, selectedCampaign]
+  );
+
+  const scopedAllRows = useMemo(
+    () => allRows.filter((row) => {
+      const platformMatch = selectedPlatform === "All Platforms" || row.platform === selectedPlatform;
+      const campaignMatch = selectedCampaign === "All Campaigns" || row.campaign === selectedCampaign;
+      return platformMatch && campaignMatch;
+    }),
+    [allRows, selectedPlatform, selectedCampaign]
+  );
+
   const postedRows = useMemo(
     () =>
-      rows.filter(
+      scopedRows.filter(
         (row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() === "posted" && rowHasEffectiveMetrics(row)
       ),
-    [rows]
+    [scopedRows]
   );
 
   const postedRowsWithAnyMetricsAcrossMonths = useMemo(
     () =>
-      allRows.filter(
+      scopedAllRows.filter(
         (row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() === "posted" && rowHasEffectiveMetrics(row)
       ),
-    [allRows]
+    [scopedAllRows]
   );
 
   const nearestMetricMonth = useMemo(() => {
     if (!postedRowsWithAnyMetricsAcrossMonths.length) return null;
     return [...postedRowsWithAnyMetricsAcrossMonths]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.date || null;
+      .sort((a, b) => {
+        const aParts = parseDateParts(a.date);
+        const bParts = parseDateParts(b.date);
+        const aTime = aParts ? new Date(aParts.year, aParts.month, aParts.day).getTime() : 0;
+        const bTime = bParts ? new Date(bParts.year, bParts.month, bParts.day).getTime() : 0;
+        return bTime - aTime;
+      })[0]?.date || null;
   }, [postedRowsWithAnyMetricsAcrossMonths]);
 
   const monthPostedRows = useMemo(
-    () => rows.filter((row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() === "posted"),
-    [rows]
+    () => scopedRows.filter((row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() === "posted"),
+    [scopedRows]
   );
 
   const monthNonPostedMetricRows = useMemo(
     () =>
-      rows.filter(
+      scopedRows.filter(
         (row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() !== "posted" && rowHasEffectiveMetrics(row)
       ),
-    [rows]
+    [scopedRows]
   );
 
   const totals = useMemo(() => {
@@ -1919,6 +2171,14 @@ function PerformanceDashboard({
   }, [postedRows]);
 
   const monthLabel = formatMonthLabel(monthDate);
+  const qualitativeRows = useMemo(
+    () => postedRows.filter((row) => getEffectiveQualitativeNotes(row)),
+    [postedRows]
+  );
+  const qualitativeHighlights = useMemo(
+    () => buildQualitativeHighlights(postedRows, monthLabel),
+    [postedRows, monthLabel]
+  );
 
   return (
     <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
@@ -1996,6 +2256,86 @@ function PerformanceDashboard({
                   }`}
                 >
                   {client}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {platformOptions.length > 1 && (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Platform Scope</div>
+              <p className="mt-1 text-sm text-slate-500">
+                Focus performance on one platform or keep all platforms in view.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedPlatform("All Platforms")}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  selectedPlatform === "All Platforms"
+                    ? "bg-slate-900 text-white shadow-sm"
+                    : "border border-slate-200 bg-slate-50 text-slate-700"
+                }`}
+              >
+                All Platforms
+              </button>
+              {platformOptions.map((platform) => (
+                <button
+                  key={platform}
+                  type="button"
+                  onClick={() => setSelectedPlatform(platform)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    selectedPlatform === platform
+                      ? "bg-slate-900 text-white shadow-sm"
+                      : "border border-slate-200 bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  {platform}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {campaignOptions.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Campaign Scope</div>
+              <p className="mt-1 text-sm text-slate-500">
+                Compare monthly performance campaign by campaign when you need tighter reporting.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedCampaign("All Campaigns")}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  selectedCampaign === "All Campaigns"
+                    ? "bg-slate-900 text-white shadow-sm"
+                    : "border border-slate-200 bg-slate-50 text-slate-700"
+                }`}
+              >
+                All Campaigns
+              </button>
+              {campaignOptions.map((campaign) => (
+                <button
+                  key={campaign}
+                  type="button"
+                  onClick={() => setSelectedCampaign(campaign)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    selectedCampaign === campaign
+                      ? "bg-slate-900 text-white shadow-sm"
+                      : "border border-slate-200 bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  {campaign}
                 </button>
               ))}
             </div>
@@ -2174,6 +2514,57 @@ function PerformanceDashboard({
               ))}
             </div>
           </div>
+
+          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-lg font-semibold text-slate-900">Narrative Insights</h4>
+                <p className="mt-1 text-sm text-slate-500">Qualitative observations captured with the performance metrics for richer client reporting.</p>
+              </div>
+              <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                {qualitativeRows.length} note{qualitativeRows.length === 1 ? "" : "s"}
+              </div>
+            </div>
+            {qualitativeRows.length === 0 ? (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">
+                No qualitative performance notes have been captured for this selection yet.
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                {qualitativeRows.slice(0, 4).map((row) => (
+                  <div key={`${row.id}-qual`} className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">{row.clientName}</span>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">{row.platform}</span>
+                      {row.campaign && <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">{row.campaign}</span>}
+                    </div>
+                    <h5 className="mt-3 text-base font-semibold text-slate-900">{row.topic || "Planned Post"}</h5>
+                    <p className="mt-3 text-sm leading-7 text-slate-700">{getEffectiveQualitativeNotes(row)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-lg font-semibold text-slate-900">Insight Readout</h4>
+                <p className="mt-1 text-sm text-slate-500">A concise interpretation layer built from the posted metrics and qualitative notes in this selection.</p>
+              </div>
+              <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                {qualitativeHighlights.length} cues
+              </div>
+            </div>
+            <div className="mt-4 grid gap-4 xl:grid-cols-3">
+              {qualitativeHighlights.map((item) => (
+                <div key={item.label} className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
+                  <p className="mt-3 text-sm leading-7 text-slate-700">{item.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -2227,6 +2618,7 @@ function PlannedPostsPanel({ rows }) {
 function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDelete, busy }) {
   const [selectedPlatform, setSelectedPlatform] = useState("All Platforms");
   const [selectedClient, setSelectedClient] = useState("All Clients");
+  const [expandedPlanId, setExpandedPlanId] = useState(null);
   const platformOptions = useMemo(
     () => Array.from(new Set(rows.map((row) => row.platform).filter(Boolean))).sort(),
     [rows]
@@ -2254,6 +2646,12 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
       setSelectedClient("All Clients");
     }
   }, [clientOptions, selectedClient]);
+
+  useEffect(() => {
+    if (expandedPlanId && !filteredRows.some((row) => row.id === expandedPlanId)) {
+      setExpandedPlanId(null);
+    }
+  }, [filteredRows, expandedPlanId]);
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -2327,12 +2725,24 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
           </div>
         ) : filteredRows.map((plan) => {
           const planKey = getPlanKey(plan);
+          const isExpanded = expandedPlanId === plan.id;
           return (
             <div key={plan.id} className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 shadow-sm">
-              <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
+              <button
+                type="button"
+                onClick={() => setExpandedPlanId((prev) => prev === plan.id ? null : plan.id)}
+                className="flex w-full flex-col gap-4 text-left lg:flex-row lg:items-start lg:justify-between"
+              >
+                <div className="space-y-4">
                   <div className="text-lg font-semibold text-slate-900">{plan.topic || "-"}</div>
-                  <div className="mt-1 text-sm text-slate-500">{plan.clientName} · {plan.platform}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                    <span>{plan.clientName} · {plan.platform}</span>
+                    {plan.campaign && (
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                        Campaign: {plan.campaign}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
@@ -2350,10 +2760,14 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
                       {plan.currentStatus}
                     </span>
                   )}
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                    {isExpanded ? "Collapse" : "Expand"}
+                  </span>
                 </div>
-              </div>
+              </button>
 
-              <div className="mt-4 grid gap-4 xl:grid-cols-[0.8fr,1.2fr]">
+              {isExpanded && (
+              <div className="mt-4 grid gap-4 border-t border-slate-200 pt-4 xl:grid-cols-[0.8fr,1.2fr]">
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-2xl bg-white p-4">
@@ -2399,6 +2813,17 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
                   </div>
 
                   <div className="mt-4">
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Qualitative Performance Notes</label>
+                    <textarea
+                      value={plan.draftQualitativeNotes}
+                      onChange={(e) => onDraftChange(planKey, "qualitativeNotes", e.target.value)}
+                      rows={3}
+                      placeholder="Add audience reactions, brand sentiment, creative learnings, or qualitative observations"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm"
+                    />
+                  </div>
+
+                  <div className="mt-4">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Performance Metrics</label>
                       <span className="text-[11px] font-medium text-slate-400">Use for posted content reporting</span>
@@ -2434,6 +2859,7 @@ function PlannedContentTable({ rows, onDraftChange, onSaveUpdate, onEdit, onDele
                   </div>
                 </div>
               </div>
+              )}
             </div>
           );
         })}
@@ -2823,6 +3249,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   const [planForm, setPlanForm] = useState({
     ...EMPTY_PLAN_FORM,
     clientName: "Acme Client",
+    campaign: "Campaign Reminder",
     date: getDefaultPlanDate(initialDataMonth),
     topic: "Campaign Reminder",
     platforms: ["Instagram", "Facebook"],
@@ -2848,8 +3275,18 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   const [syncState, setSyncState] = useState("idle");
   const [accessInvites, setAccessInvites] = useState([]);
   const [inviteForm, setInviteForm] = useState(EMPTY_INVITE_FORM);
+  const [managedClients, setManagedClients] = useState(() => readStoredItems(CLIENT_DIRECTORY_STORAGE_KEY, []).map((item) => ({
+    id: item.id || createId("client"),
+    name: item.name || "",
+    notes: item.notes || "",
+    createdAt: item.createdAt || "",
+  })));
+  const [clientForm, setClientForm] = useState(EMPTY_CLIENT_FORM);
+  const [clientBusy, setClientBusy] = useState(false);
+  const [editingClientId, setEditingClientId] = useState(null);
   const [selectedCalendarPost, setSelectedCalendarPost] = useState(null);
   const [selectedCalendarOverflow, setSelectedCalendarOverflow] = useState(null);
+  const [clientDashboardView, setClientDashboardView] = useState("performance");
 
   const sharedModeReady = hasSharedConfiguration();
   const supabase = useMemo(() => getSupabaseClient(), [sharedModeReady]);
@@ -2869,7 +3306,19 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     window.localStorage.setItem(STATUS_DRAFTS_STORAGE_KEY, JSON.stringify(statusDrafts));
   }, [statusDrafts]);
 
-  const accessibleClientNames = useMemo(() => getAccessibleClientNames(plans), [plans]);
+  useEffect(() => {
+    if (typeof window === "undefined" || sharedModeReady) return;
+    window.localStorage.setItem(CLIENT_DIRECTORY_STORAGE_KEY, JSON.stringify(managedClients));
+  }, [managedClients, sharedModeReady]);
+
+  const accessibleClientNames = useMemo(
+    () => Array.from(new Set([...getAccessibleClientNames(plans), ...getManagedClientNames(managedClients)])).sort(),
+    [plans, managedClients]
+  );
+  const directoryClientNames = useMemo(
+    () => getManagedClientNames(managedClients),
+    [managedClients]
+  );
 
   useEffect(() => {
     if (!currentUser) return;
@@ -2958,12 +3407,12 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     try {
       let planQuery = supabase
         .from("plans")
-        .select("id, client_name, date, platform, topic, format, time, notes")
+        .select("id, client_name, campaign, date, platform, topic, format, time, notes")
         .order("date", { ascending: true });
 
       let statusQuery = supabase
         .from("status_records")
-        .select("id, plan_id, client_name, date, platform, topic, format, time, status, post_link, notes, reach, impressions, likes, comments, shares, clicks")
+        .select("id, plan_id, client_name, campaign, date, platform, topic, format, time, status, post_link, notes, qualitative_notes, reach, impressions, likes, comments, shares, clicks")
         .order("date", { ascending: true });
 
       if (user.role === "client" && user.clientName) {
@@ -2988,8 +3437,17 @@ export default function ClientSocialMediaPostingTrackerInterface() {
         );
       }
 
+      if (canEdit(user)) {
+        remoteRequests.push(
+          supabase
+            .from("client_directory")
+            .select("id, name, notes, created_at")
+            .order("name", { ascending: true })
+        );
+      }
+
       const remoteResults = await Promise.all(remoteRequests);
-      const [{ data: planRows, error: plansError }, { data: statusRows, error: statusError }, inviteResult] = remoteResults;
+      const [{ data: planRows, error: plansError }, { data: statusRows, error: statusError }, inviteResult, clientResult] = remoteResults;
 
       if (plansError) throw plansError;
       if (statusError) throw statusError;
@@ -3001,6 +3459,11 @@ export default function ClientSocialMediaPostingTrackerInterface() {
         setAccessInvites((inviteResult?.data || []).map(mapDbInvite));
       } else {
         setAccessInvites([]);
+      }
+      if (canEdit(user)) {
+        const effectiveClientResult = user.role === "admin" ? clientResult : inviteResult;
+        if (effectiveClientResult?.error) throw effectiveClientResult.error;
+        setManagedClients((effectiveClientResult?.data || []).map(mapDbClient));
       }
       setSyncState("connected");
     } catch (error) {
@@ -3071,6 +3534,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       if (field === "role" && value !== "client") next.clientName = "";
       return next;
     });
+  const handleClientFormChange = (field, value) => setClientForm((prev) => ({ ...prev, [field]: value }));
 
   const togglePlanPlatform = (platform) => {
     setPlanForm((prev) => {
@@ -3127,6 +3591,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
 
     const baseEntry = {
       clientName: planForm.clientName.trim(),
+      campaign: planForm.campaign.trim(),
       date: planForm.date,
       topic: planForm.topic.trim(),
       notes: planForm.notes.trim(),
@@ -3185,6 +3650,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     if (!plan) return;
     setPlanForm({
       clientName: plan.clientName,
+      campaign: plan.campaign || "",
       date: plan.date,
       platforms: [plan.platform],
       platformFormats: { [plan.platform]: plan.format || "" },
@@ -3301,6 +3767,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       status: normalizedDraft.status,
       postLink: normalizedDraft.postLink.trim(),
       notes: normalizedDraft.notes.trim(),
+      qualitativeNotes: normalizedDraft.qualitativeNotes?.trim() || "",
       reach: parseMetricValue(normalizedDraft.reach),
       impressions: parseMetricValue(normalizedDraft.impressions),
       likes: parseMetricValue(normalizedDraft.likes),
@@ -3527,6 +3994,89 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     }
   }
 
+  function handleClientEdit(client) {
+    setEditingClientId(client.id || null);
+    setClientForm({
+      name: client.name || "",
+      notes: client.notes || "",
+    });
+    setNotice(`Editing client ${client.name}.`);
+  }
+
+  async function handleClientSubmit(event) {
+    event.preventDefault();
+    const name = clientForm.name.trim();
+    const notes = clientForm.notes.trim();
+    if (!name) {
+      setNotice("Add a client brand name before saving.");
+      return;
+    }
+
+    if (sharedModeReady && currentUser?.mode === "shared" && canEdit(currentUser) && supabase) {
+      setClientBusy(true);
+      try {
+        const payload = { name, notes: notes || null, updated_by: currentUser.id };
+        if (editingClientId) payload.id = editingClientId;
+        const { error } = await supabase.from("client_directory").upsert(payload);
+        if (error) throw error;
+        setClientForm(EMPTY_CLIENT_FORM);
+        setEditingClientId(null);
+        setNotice(`Client saved: ${name}.`);
+        await loadRemoteData(currentUser);
+      } catch (error) {
+        setNotice(error.message || "Unable to save the client.");
+      } finally {
+        setClientBusy(false);
+      }
+      return;
+    }
+
+    setManagedClients((prev) => {
+      const nextItem = {
+        id: editingClientId || createId("client"),
+        name,
+        notes,
+        createdAt: new Date().toISOString(),
+      };
+      const withoutMatch = prev.filter((item) => item.id !== editingClientId && item.name.toLowerCase() !== name.toLowerCase());
+      return [...withoutMatch, nextItem].sort((a, b) => a.name.localeCompare(b.name));
+    });
+    setClientForm(EMPTY_CLIENT_FORM);
+    setEditingClientId(null);
+    setNotice(`Client saved: ${name}.`);
+  }
+
+  async function handleClientDelete(client) {
+    const ok = typeof window === "undefined" ? true : window.confirm(`Remove client ${client.name}?`);
+    if (!ok) return;
+
+    if (sharedModeReady && currentUser?.mode === "shared" && canEdit(currentUser) && supabase) {
+      setClientBusy(true);
+      try {
+        const { error } = await supabase.from("client_directory").delete().eq("id", client.id);
+        if (error) throw error;
+        if (editingClientId === client.id) {
+          setEditingClientId(null);
+          setClientForm(EMPTY_CLIENT_FORM);
+        }
+        setNotice(`Client removed: ${client.name}.`);
+        await loadRemoteData(currentUser);
+      } catch (error) {
+        setNotice(error.message || "Unable to remove the client.");
+      } finally {
+        setClientBusy(false);
+      }
+      return;
+    }
+
+    setManagedClients((prev) => prev.filter((item) => item.id !== client.id));
+    if (editingClientId === client.id) {
+      setEditingClientId(null);
+      setClientForm(EMPTY_CLIENT_FORM);
+    }
+    setNotice(`Client removed: ${client.name}.`);
+  }
+
   async function handleLogout() {
     if (sharedModeReady && supabase && currentUser?.mode === "shared") {
       await supabase.auth.signOut();
@@ -3599,6 +4149,17 @@ export default function ClientSocialMediaPostingTrackerInterface() {
         {!sharedModeReady && <SharedSetupPanel />}
         {isClientView && <ClientViewBanner currentUser={currentUser} />}
         {!isClientView && <AccessSummary currentUser={currentUser} selectedClientName={selectedClientName} />}
+        {!isClientView && canEdit(currentUser) && (
+          <ClientDirectoryPanel
+            clientForm={clientForm}
+            onClientFormChange={handleClientFormChange}
+            onClientSubmit={handleClientSubmit}
+            onClientEdit={handleClientEdit}
+            onClientDelete={handleClientDelete}
+            clients={managedClients}
+            busy={clientBusy}
+          />
+        )}
         {!isClientView && sharedModeReady && currentUser.mode === "shared" && currentUser.role === "admin" && (
           <AccessManagementPanel
             inviteForm={inviteForm}
@@ -3608,7 +4169,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
             onInviteDelete={handleInviteDelete}
             accessInvites={accessInvites}
             inviteBusy={inviteBusy}
-            clientOptions={accessibleClientNames}
+            clientOptions={directoryClientNames}
           />
         )}
 
@@ -3627,6 +4188,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
               <PlannedEntryForm
                 planForm={planForm}
+                clientOptions={directoryClientNames}
                 editingPlanId={editingPlanId}
                 onPlanChange={handlePlanChange}
                 onTogglePlatform={togglePlanPlatform}
@@ -3661,38 +4223,56 @@ export default function ClientSocialMediaPostingTrackerInterface() {
             )}
             {isClientView && (
               <>
-                <PerformanceDashboard
-                  rows={mergedPlanRows}
-                  allRows={allMergedPlanRows}
-                  monthDate={activeDataMonth}
-                  isClientView
-                  selectedClientName={selectedClientName}
-                  clientOptions={
-                    currentUser?.role === "client"
-                      ? parseClientScopeList(currentUser.clientName)
-                      : accessibleClientNames
-                  }
-                  allClientsLabel={currentUser?.role === "client" ? "All My Brands" : "All Clients"}
-                  onSelectClient={setSelectedClientName}
-                  onChangeMonth={(value) => {
-                    setReportingMonthPinned(true);
-                    setActiveDataMonth(value);
-                  }}
-                  onPreviousMonth={() => {
-                    setReportingMonthPinned(true);
-                    setActiveDataMonth((prev) => shiftMonth(prev, -1));
-                  }}
-                  onNextMonth={() => {
-                    setReportingMonthPinned(true);
-                    setActiveDataMonth((prev) => shiftMonth(prev, 1));
-                  }}
-                  onGoToCurrentMonth={() => {
-                    setReportingMonthPinned(false);
-                    setActiveDataMonth(getMonthStart(new Date()));
-                  }}
-                />
-                <StatCards stats={stats} />
-                <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />
+                <div className="inline-flex rounded-2xl bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setClientDashboardView("performance")}
+                    className={`rounded-xl px-4 py-2 text-sm font-semibold ${clientDashboardView === "performance" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
+                  >
+                    Performance Overview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClientDashboardView("snapshot")}
+                    className={`rounded-xl px-4 py-2 text-sm font-semibold ${clientDashboardView === "snapshot" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
+                  >
+                    Plan vs Execution
+                  </button>
+                </div>
+                {clientDashboardView === "performance" ? (
+                  <PerformanceDashboard
+                    rows={mergedPlanRows}
+                    allRows={allMergedPlanRows}
+                    monthDate={activeDataMonth}
+                    isClientView
+                    selectedClientName={selectedClientName}
+                    clientOptions={
+                      currentUser?.role === "client"
+                        ? parseClientScopeList(currentUser.clientName)
+                        : accessibleClientNames
+                    }
+                    allClientsLabel={currentUser?.role === "client" ? "All My Brands" : "All Clients"}
+                    onSelectClient={setSelectedClientName}
+                    onChangeMonth={(value) => {
+                      setReportingMonthPinned(true);
+                      setActiveDataMonth(value);
+                    }}
+                    onPreviousMonth={() => {
+                      setReportingMonthPinned(true);
+                      setActiveDataMonth((prev) => shiftMonth(prev, -1));
+                    }}
+                    onNextMonth={() => {
+                      setReportingMonthPinned(true);
+                      setActiveDataMonth((prev) => shiftMonth(prev, 1));
+                    }}
+                    onGoToCurrentMonth={() => {
+                      setReportingMonthPinned(false);
+                      setActiveDataMonth(getMonthStart(new Date()));
+                    }}
+                  />
+                ) : (
+                  <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />
+                )}
               </>
             )}
             {!isClientView && canEdit(currentUser) && (
@@ -3770,6 +4350,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       <EditPlanDialog
         open={!isClientView && canEdit(currentUser) && editingPlanId !== null}
         planForm={planForm}
+        clientOptions={directoryClientNames}
         editingPlanId={editingPlanId}
         onPlanChange={handlePlanChange}
         onTogglePlatform={togglePlanPlatform}

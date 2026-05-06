@@ -16,9 +16,20 @@ create table if not exists public.access_invites (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.client_directory (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  notes text,
+  created_by uuid references public.profiles (id),
+  updated_by uuid references public.profiles (id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.plans (
   id uuid primary key default gen_random_uuid(),
   client_name text not null,
+  campaign text,
   date date not null,
   platform text not null,
   topic text not null,
@@ -35,6 +46,7 @@ create table if not exists public.status_records (
   id uuid primary key default gen_random_uuid(),
   plan_id uuid not null references public.plans (id) on delete cascade,
   client_name text not null,
+  campaign text,
   date date not null,
   platform text not null,
   topic text not null,
@@ -43,6 +55,7 @@ create table if not exists public.status_records (
   status text not null check (status in ('Posted', 'Awaiting Approval', 'Missed', 'Rescheduled', 'Overdue')),
   post_link text,
   notes text,
+  qualitative_notes text,
   created_by uuid references public.profiles (id),
   updated_by uuid references public.profiles (id),
   created_at timestamptz not null default now(),
@@ -55,6 +68,9 @@ alter table public.status_records add column if not exists likes integer;
 alter table public.status_records add column if not exists comments integer;
 alter table public.status_records add column if not exists shares integer;
 alter table public.status_records add column if not exists clicks integer;
+alter table public.plans add column if not exists campaign text;
+alter table public.status_records add column if not exists campaign text;
+alter table public.status_records add column if not exists qualitative_notes text;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -74,6 +90,11 @@ for each row execute function public.set_updated_at();
 drop trigger if exists status_records_set_updated_at on public.status_records;
 create trigger status_records_set_updated_at
 before update on public.status_records
+for each row execute function public.set_updated_at();
+
+drop trigger if exists client_directory_set_updated_at on public.client_directory;
+create trigger client_directory_set_updated_at
+before update on public.client_directory
 for each row execute function public.set_updated_at();
 
 create or replace function public.get_my_role()
@@ -212,6 +233,7 @@ for each row execute function public.handle_new_user_profile();
 
 alter table public.profiles enable row level security;
 alter table public.access_invites enable row level security;
+alter table public.client_directory enable row level security;
 alter table public.plans enable row level security;
 alter table public.status_records enable row level security;
 
@@ -243,6 +265,22 @@ on public.access_invites
 for all
 using (public.get_my_role() = 'admin')
 with check (public.get_my_role() = 'admin');
+
+drop policy if exists "client_directory_select_by_scope" on public.client_directory;
+create policy "client_directory_select_by_scope"
+on public.client_directory
+for select
+using (
+  public.get_my_role() in ('admin', 'manager')
+  or public.has_client_scope(name)
+);
+
+drop policy if exists "client_directory_write_admin_manager" on public.client_directory;
+create policy "client_directory_write_admin_manager"
+on public.client_directory
+for all
+using (public.get_my_role() in ('admin', 'manager'))
+with check (public.get_my_role() in ('admin', 'manager'));
 
 drop policy if exists "plans_select_by_scope" on public.plans;
 create policy "plans_select_by_scope"
@@ -279,9 +317,11 @@ with check (public.get_my_role() in ('admin', 'manager'));
 grant usage on schema public to anon, authenticated;
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update, delete on public.access_invites to authenticated;
+grant select, insert, update, delete on public.client_directory to authenticated;
 grant select, insert, update, delete on public.plans to authenticated;
 grant select, insert, update, delete on public.status_records to authenticated;
 grant select on public.profiles to anon;
+grant select on public.client_directory to anon;
 grant select on public.plans to anon;
 grant select on public.status_records to anon;
 grant execute on function public.get_my_role() to anon, authenticated;
