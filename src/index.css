@@ -4,10 +4,10 @@
 
 @layer base {
   :root {
-    --df-navy: #1f2348;
-    --df-lilac: #e3dcf7;
-    --df-gold: #f2b313;
-    --df-purple: #8e69be;
+    --df-navy: #1c1c3f;
+    --df-lilac: #e4d8f5;
+    --df-gold: #f4b400;
+    --df-purple: #8a64b4;
     --df-ink: #09090b;
     --df-surface: #f7f5fb;
   }
@@ -22,9 +22,9 @@
     font-family: "Open Sans", ui-sans-serif, system-ui, sans-serif;
     color: var(--df-navy);
     background:
-      radial-gradient(circle at top, rgba(142, 105, 190, 0.15), transparent 28%),
-      radial-gradient(circle at 85% 0%, rgba(242, 179, 19, 0.12), transparent 18%),
-      linear-gradient(180deg, #fbfaff 0%, #f5f2fb 48%, #fbfaff 100%);
+      radial-gradient(circle at top, rgba(138, 100, 180, 0.16), transparent 28%),
+      radial-gradient(circle at 85% 0%, rgba(244, 180, 0, 0.14), transparent 18%),
+      linear-gradient(180deg, #fcfbff 0%, #f5f0fb 48%, #fcfbff 100%);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -51,6 +51,6 @@
   }
 
   ::selection {
-    background: rgba(142, 105, 190, 0.22);
+    background: rgba(138, 100, 180, 0.22);
   }
 }
