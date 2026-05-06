@@ -4833,7 +4833,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                       allClientsLabel="All My Brands"
                     />
                     <CalendarView
-                      rows={mergedPlanRows}
+                      rows={allMergedPlanRows}
                       monthDate={calendarMonth}
                       onPreviousMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
                       onNextMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
@@ -4962,7 +4962,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
               <>
                 <StatCards stats={stats} />
                 <CalendarView
-                  rows={mergedPlanRows}
+                  rows={allMergedPlanRows}
                   monthDate={calendarMonth}
                   onPreviousMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
                   onNextMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
