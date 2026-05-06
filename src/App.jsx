@@ -260,6 +260,13 @@ function parseMetricValue(value) {
   return Math.round(parsed);
 }
 
+function resolveStatusValue(draftStatus, fallbackStatus = "") {
+  const normalizedDraft = typeof draftStatus === "string" ? draftStatus.trim() : "";
+  if (normalizedDraft) return normalizedDraft;
+  const normalizedFallback = typeof fallbackStatus === "string" ? fallbackStatus.trim() : "";
+  return normalizedFallback || "";
+}
+
 function formatMetricValue(value) {
   if (value === null || value === undefined || value === "") return "-";
   const parsed = Number(value);
@@ -3180,15 +3187,21 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   async function saveDraftToStatusLog(plan) {
     const planKey = getPlanKey(plan);
     const draft = statusDrafts[planKey] || EMPTY_STATUS_DRAFT;
-    if (!draft.status) {
+    const effectiveStatus = resolveStatusValue(draft.status, plan.currentStatus);
+    if (!effectiveStatus || effectiveStatus === "-") {
       setNotice("Select a status before saving the update.");
       return;
     }
 
+    const normalizedDraft = {
+      ...draft,
+      status: effectiveStatus,
+    };
+
     if (sharedModeReady && currentUser?.mode === "shared" && supabase) {
       setBusy(true);
       try {
-        const payload = toDbStatus(plan, draft, currentUser.id);
+        const payload = toDbStatus(plan, normalizedDraft, currentUser.id);
         const { data: existing, error: existingError } = await supabase
           .from("status_records")
           .select("id")
@@ -3231,15 +3244,15 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       topic: plan.topic,
       format: plan.format,
       time: plan.time,
-      status: draft.status,
-      postLink: draft.postLink.trim(),
-      notes: draft.notes.trim(),
-      reach: parseMetricValue(draft.reach),
-      impressions: parseMetricValue(draft.impressions),
-      likes: parseMetricValue(draft.likes),
-      comments: parseMetricValue(draft.comments),
-      shares: parseMetricValue(draft.shares),
-      clicks: parseMetricValue(draft.clicks),
+      status: normalizedDraft.status,
+      postLink: normalizedDraft.postLink.trim(),
+      notes: normalizedDraft.notes.trim(),
+      reach: parseMetricValue(normalizedDraft.reach),
+      impressions: parseMetricValue(normalizedDraft.impressions),
+      likes: parseMetricValue(normalizedDraft.likes),
+      comments: parseMetricValue(normalizedDraft.comments),
+      shares: parseMetricValue(normalizedDraft.shares),
+      clicks: parseMetricValue(normalizedDraft.clicks),
     });
     setStatusRecords((prev) => {
       const existingIndex = prev.findIndex((item) => item.planId === plan.id);
@@ -3329,7 +3342,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
         detailNotes: shouldUseStatusNotes
           ? (matchingStatus?.notes || plan.notes || "")
           : (plan.notes || ""),
-        draftStatus: draft?.status ?? matchingStatus?.status ?? "",
+        draftStatus: resolveStatusValue(draft?.status, matchingStatus?.status),
         draftPostLink: draft?.postLink ?? matchingStatus?.postLink ?? "",
         draftNotes: draft?.notes ?? matchingStatus?.notes ?? "",
         ...draftMetrics,
