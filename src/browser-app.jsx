@@ -2100,7 +2100,7 @@ function CalendarDayDetailsDialog({ dayLabel, rows, onClose, onSelectRow }) {
   );
 }
 
-function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToToday, onSelectRow, compact = false }) {
+function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onSelectRow, compact = false }) {
   const [calendarViewMode, setCalendarViewMode] = useState("monthly");
   const calendarDays = useMemo(() => getMonthGridDays(monthDate), [monthDate]);
   const monthTitle = monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -2192,7 +2192,6 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
           <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev</button>
           <div className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900">{monthTitle}</div>
           <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next</button>
-          <button type="button" onClick={onGoToToday} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Today</button>
         </div>
       </div>
 
@@ -4838,7 +4837,6 @@ function ClientSocialMediaPostingTrackerInterface() {
                       monthDate={calendarMonth}
                       onPreviousMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
                       onNextMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                      onGoToToday={() => setCalendarMonth(new Date())}
                       onSelectRow={(payload) => {
                         if (payload?.__dayOverflow) {
                           setSelectedCalendarOverflow(payload);
@@ -4968,7 +4966,6 @@ function ClientSocialMediaPostingTrackerInterface() {
                   monthDate={calendarMonth}
                   onPreviousMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
                   onNextMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                  onGoToToday={() => setCalendarMonth(new Date())}
                   onSelectRow={(payload) => {
                     if (payload?.__dayOverflow) {
                       setSelectedCalendarOverflow(payload);
