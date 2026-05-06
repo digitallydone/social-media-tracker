@@ -32,6 +32,7 @@ const CONTENT_FORMAT_OPTIONS = [
 
 const STATUS_OPTIONS = ["Posted", "Awaiting Approval", "Missed", "Rescheduled"];
 const ACCESS_ROLE_OPTIONS = ["admin", "manager", "client"];
+const PERFORMANCE_METRIC_FIELDS = ["reach", "impressions", "likes", "comments", "shares", "clicks"];
 
 const DEMO_USERS = [
   { id: "admin-1", name: "Richard", role: "admin", clientName: "", mode: "demo" },
@@ -265,6 +266,30 @@ function resolveStatusValue(draftStatus, fallbackStatus = "") {
   if (normalizedDraft) return normalizedDraft;
   const normalizedFallback = typeof fallbackStatus === "string" ? fallbackStatus.trim() : "";
   return normalizedFallback || "";
+}
+
+function getDraftMetricKey(field) {
+  return `draft${field.charAt(0).toUpperCase()}${field.slice(1)}`;
+}
+
+function getEffectiveMetricValue(row, field) {
+  const draftValue = parseMetricValue(row?.[getDraftMetricKey(field)]);
+  if (draftValue !== null) return draftValue;
+  return parseMetricValue(row?.[field]);
+}
+
+function rowHasEffectiveMetrics(row) {
+  return PERFORMANCE_METRIC_FIELDS.some((field) => getEffectiveMetricValue(row, field) !== null);
+}
+
+function getEffectiveRowStatus(row) {
+  return resolveStatusValue(row?.draftStatus, row?.currentStatus);
+}
+
+function getEffectiveRowEngagementTotal(row) {
+  return (getEffectiveMetricValue(row, "likes") || 0)
+    + (getEffectiveMetricValue(row, "comments") || 0)
+    + (getEffectiveMetricValue(row, "shares") || 0);
 }
 
 function formatMetricValue(value) {
@@ -533,6 +558,41 @@ function downloadJsonFile(filename, data) {
   link.download = filename;
   link.click();
   window.URL.revokeObjectURL(url);
+}
+
+function buildMergedPlanRows(plans, statusRecords, statusDrafts) {
+  return plans.map((plan) => {
+    const matchingStatus = statusRecords.find((item) => item.planId === plan.id);
+    const overdue = isPlanOverdue(plan, matchingStatus);
+    const draft = statusDrafts[getPlanKey(plan)] || null;
+    const currentStatus = matchingStatus?.status || (overdue ? "Overdue" : "-");
+    const shouldUseStatusNotes = ["Posted", "Awaiting Approval", "Rescheduled", "Missed"].includes(currentStatus);
+    const draftMetrics = Object.fromEntries(
+      PERFORMANCE_METRIC_FIELDS.map((field) => [
+        getDraftMetricKey(field),
+        draft?.[field] ?? matchingStatus?.[field] ?? "",
+      ])
+    );
+
+    return {
+      ...plan,
+      currentStatus,
+      currentPostLink: matchingStatus?.postLink || "",
+      reach: matchingStatus?.reach ?? null,
+      impressions: matchingStatus?.impressions ?? null,
+      likes: matchingStatus?.likes ?? null,
+      comments: matchingStatus?.comments ?? null,
+      shares: matchingStatus?.shares ?? null,
+      clicks: matchingStatus?.clicks ?? null,
+      detailNotes: shouldUseStatusNotes
+        ? (matchingStatus?.notes || plan.notes || "")
+        : (plan.notes || ""),
+      draftStatus: resolveStatusValue(draft?.status, matchingStatus?.status),
+      draftPostLink: draft?.postLink ?? matchingStatus?.postLink ?? "",
+      draftNotes: draft?.notes ?? matchingStatus?.notes ?? "",
+      ...draftMetrics,
+    };
+  });
 }
 
 function getMonthGridStart(date) {
@@ -1767,8 +1827,7 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
 
 function PerformanceDashboard({
   rows,
-  records,
-  allRecords = [],
+  allRows = [],
   monthDate,
   isClientView = false,
   selectedClientName = "All Clients",
@@ -1780,25 +1839,20 @@ function PerformanceDashboard({
   onNextMonth,
   onGoToCurrentMonth,
 }) {
-  const monthScopedRecords = useMemo(
-    () => records.filter((row) => isSameMonth(row.date, monthDate)),
-    [records, monthDate]
-  );
-
   const postedRows = useMemo(
     () =>
-      monthScopedRecords.filter(
-        (row) => String(row.status || "").trim().toLowerCase() === "posted" && hasPerformanceMetrics(row)
+      rows.filter(
+        (row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() === "posted" && rowHasEffectiveMetrics(row)
       ),
-    [monthScopedRecords]
+    [rows]
   );
 
   const postedRowsWithAnyMetricsAcrossMonths = useMemo(
     () =>
-      allRecords.filter(
-        (row) => String(row.status || "").trim().toLowerCase() === "posted" && hasPerformanceMetrics(row)
+      allRows.filter(
+        (row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() === "posted" && rowHasEffectiveMetrics(row)
       ),
-    [allRecords]
+    [allRows]
   );
 
   const nearestMetricMonth = useMemo(() => {
@@ -1808,27 +1862,27 @@ function PerformanceDashboard({
   }, [postedRowsWithAnyMetricsAcrossMonths]);
 
   const monthPostedRows = useMemo(
-    () => monthScopedRecords.filter((row) => String(row.status || "").trim().toLowerCase() === "posted"),
-    [monthScopedRecords]
+    () => rows.filter((row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() === "posted"),
+    [rows]
   );
 
   const monthNonPostedMetricRows = useMemo(
     () =>
-      monthScopedRecords.filter(
-        (row) => String(row.status || "").trim().toLowerCase() !== "posted" && hasPerformanceMetrics(row)
+      rows.filter(
+        (row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() !== "posted" && rowHasEffectiveMetrics(row)
       ),
-    [monthScopedRecords]
+    [rows]
   );
 
   const totals = useMemo(() => {
     return postedRows.reduce(
       (acc, row) => {
-        acc.reach += Number(row.reach) || 0;
-        acc.impressions += Number(row.impressions) || 0;
-        acc.likes += Number(row.likes) || 0;
-        acc.comments += Number(row.comments) || 0;
-        acc.shares += Number(row.shares) || 0;
-        acc.clicks += Number(row.clicks) || 0;
+        acc.reach += getEffectiveMetricValue(row, "reach") || 0;
+        acc.impressions += getEffectiveMetricValue(row, "impressions") || 0;
+        acc.likes += getEffectiveMetricValue(row, "likes") || 0;
+        acc.comments += getEffectiveMetricValue(row, "comments") || 0;
+        acc.shares += getEffectiveMetricValue(row, "shares") || 0;
+        acc.clicks += getEffectiveMetricValue(row, "clicks") || 0;
         return acc;
       },
       { reach: 0, impressions: 0, likes: 0, comments: 0, shares: 0, clicks: 0 }
@@ -1841,7 +1895,7 @@ function PerformanceDashboard({
   const topPost = useMemo(() => {
     return postedRows.reduce((best, row) => {
       if (!best) return row;
-      return getEngagementTotal(row) > getEngagementTotal(best) ? row : best;
+      return getEffectiveRowEngagementTotal(row) > getEffectiveRowEngagementTotal(best) ? row : best;
     }, null);
   }, [postedRows]);
 
@@ -1851,8 +1905,8 @@ function PerformanceDashboard({
       if (!grouped[row.platform]) {
         grouped[row.platform] = { platform: row.platform, engagement: 0, clicks: 0, posts: 0 };
       }
-      grouped[row.platform].engagement += getEngagementTotal(row);
-      grouped[row.platform].clicks += Number(row.clicks) || 0;
+      grouped[row.platform].engagement += getEffectiveRowEngagementTotal(row);
+      grouped[row.platform].clicks += getEffectiveMetricValue(row, "clicks") || 0;
       grouped[row.platform].posts += 1;
     });
     return Object.values(grouped).sort((a, b) => b.engagement - a.engagement)[0] || null;
@@ -1860,7 +1914,7 @@ function PerformanceDashboard({
 
   const leaderboard = useMemo(() => {
     return [...postedRows]
-      .sort((a, b) => getEngagementTotal(b) - getEngagementTotal(a))
+      .sort((a, b) => getEffectiveRowEngagementTotal(b) - getEffectiveRowEngagementTotal(a))
       .slice(0, 4);
   }, [postedRows]);
 
@@ -2000,10 +2054,10 @@ function PerformanceDashboard({
                     <p className="mt-1 text-sm text-slate-500">{topPost.platform} · {topPost.clientName}</p>
                     <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
                       <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700">
-                        Reach {formatMetricValue(topPost.reach)}
+                        Reach {formatMetricValue(getEffectiveMetricValue(topPost, "reach"))}
                       </span>
                       <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
-                        Engagement {formatMetricValue(getEngagementTotal(topPost))}
+                        Engagement {formatMetricValue(getEffectiveRowEngagementTotal(topPost))}
                       </span>
                     </div>
                   </>
@@ -2103,17 +2157,17 @@ function PerformanceDashboard({
                       <p className="mt-1 text-sm text-slate-500">{row.platform} · {row.clientName}</p>
                     </div>
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                      {formatMetricValue(getEngagementTotal(row))} engagement
+                      {formatMetricValue(getEffectiveRowEngagementTotal(row))} engagement
                     </span>
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-2xl bg-slate-50 px-4 py-3">
                       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Impressions</div>
-                      <div className="mt-2 text-xl font-semibold text-slate-900">{formatMetricValue(row.impressions)}</div>
+                    <div className="mt-2 text-xl font-semibold text-slate-900">{formatMetricValue(getEffectiveMetricValue(row, "impressions"))}</div>
                     </div>
                     <div className="rounded-2xl bg-slate-50 px-4 py-3">
                       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Clicks</div>
-                      <div className="mt-2 text-xl font-semibold text-slate-900">{formatMetricValue(row.clicks)}</div>
+                      <div className="mt-2 text-xl font-semibold text-slate-900">{formatMetricValue(getEffectiveMetricValue(row, "clicks"))}</div>
                     </div>
                   </div>
                 </div>
@@ -3315,40 +3369,15 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     }
   }, [statusRecords, sharedModeReady]);
 
-  const mergedPlanRows = useMemo(() => {
-    return monthFilteredPlans.map((plan) => {
-      const matchingStatus = monthFilteredStatusRecords.find((item) => item.planId === plan.id);
-      const overdue = isPlanOverdue(plan, matchingStatus);
-      const draft = statusDrafts[getPlanKey(plan)] || null;
-      const currentStatus = matchingStatus?.status || (overdue ? "Overdue" : "-");
-      const shouldUseStatusNotes = ["Posted", "Awaiting Approval", "Rescheduled", "Missed"].includes(currentStatus);
-      const metricFields = ["reach", "impressions", "likes", "comments", "shares", "clicks"];
-      const draftMetrics = Object.fromEntries(
-        metricFields.map((field) => [
-          `draft${field.charAt(0).toUpperCase()}${field.slice(1)}`,
-          draft?.[field] ?? matchingStatus?.[field] ?? "",
-        ])
-      );
-      return {
-        ...plan,
-        currentStatus,
-        currentPostLink: matchingStatus?.postLink || "",
-        reach: matchingStatus?.reach ?? null,
-        impressions: matchingStatus?.impressions ?? null,
-        likes: matchingStatus?.likes ?? null,
-        comments: matchingStatus?.comments ?? null,
-        shares: matchingStatus?.shares ?? null,
-        clicks: matchingStatus?.clicks ?? null,
-        detailNotes: shouldUseStatusNotes
-          ? (matchingStatus?.notes || plan.notes || "")
-          : (plan.notes || ""),
-        draftStatus: resolveStatusValue(draft?.status, matchingStatus?.status),
-        draftPostLink: draft?.postLink ?? matchingStatus?.postLink ?? "",
-        draftNotes: draft?.notes ?? matchingStatus?.notes ?? "",
-        ...draftMetrics,
-      };
-    });
-  }, [monthFilteredPlans, monthFilteredStatusRecords, statusDrafts, activeDataMonth]);
+  const allMergedPlanRows = useMemo(
+    () => buildMergedPlanRows(filteredPlans, filteredStatusRecords, statusDrafts),
+    [filteredPlans, filteredStatusRecords, statusDrafts]
+  );
+
+  const mergedPlanRows = useMemo(
+    () => allMergedPlanRows.filter((plan) => isSameMonth(plan.date, activeDataMonth)),
+    [allMergedPlanRows, activeDataMonth]
+  );
 
   const summaryStatusRecords = useMemo(() => {
     const base = [...monthFilteredStatusRecords];
@@ -3634,8 +3663,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
               <>
                 <PerformanceDashboard
                   rows={mergedPlanRows}
-                  records={monthFilteredStatusRecords}
-                  allRecords={filteredStatusRecords}
+                  allRows={allMergedPlanRows}
                   monthDate={activeDataMonth}
                   isClientView
                   selectedClientName={selectedClientName}
@@ -3675,8 +3703,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
             {!isClientView && (
               <PerformanceDashboard
                 rows={mergedPlanRows}
-                records={monthFilteredStatusRecords}
-                allRecords={filteredStatusRecords}
+                allRows={allMergedPlanRows}
                 monthDate={activeDataMonth}
                 selectedClientName={selectedClientName}
                 clientOptions={
