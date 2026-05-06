@@ -2101,6 +2101,7 @@ function CalendarDayDetailsDialog({ dayLabel, rows, onClose, onSelectRow }) {
 }
 
 function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToToday, onSelectRow, compact = false }) {
+  const [calendarViewMode, setCalendarViewMode] = useState("monthly");
   const calendarDays = useMemo(() => getMonthGridDays(monthDate), [monthDate]);
   const monthTitle = monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const rowsByDate = useMemo(() => {
@@ -2125,15 +2126,69 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
       }))
       .filter((item) => item.rows.length > 0);
   }, [calendarDays, monthDate, rowsByDate]);
+  const weeklyGroups = useMemo(() => {
+    const groups = [];
+    const currentMonthDays = calendarDays.filter((day) => day.getMonth() === monthDate.getMonth());
+    for (let index = 0; index < currentMonthDays.length; index += 7) {
+      const days = currentMonthDays.slice(index, index + 7).map((day) => {
+        const dateKey = formatDateKey(day);
+        return {
+          dateKey,
+          dayLabel: day.toLocaleDateString(undefined, { weekday: "short", day: "numeric" }),
+          rows: rowsByDate[dateKey] || [],
+        };
+      });
+      const weekRows = days.flatMap((day) => day.rows);
+      groups.push({
+        id: `${days[0]?.dateKey || index}`,
+        label: `${days[0]?.dayLabel || ""} - ${days[days.length - 1]?.dayLabel || ""}`,
+        days,
+        rows: weekRows,
+      });
+    }
+    return groups;
+  }, [calendarDays, monthDate, rowsByDate]);
+
+  const renderCompactRowButton = (row) => (
+    <button
+      key={row.id}
+      type="button"
+      onClick={() => onSelectRow?.(row)}
+      className="w-full rounded-full border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-[11px] font-semibold text-slate-800">{row.platform}</span>
+        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${row.currentStatus === "-" ? "border-slate-200 bg-slate-100 text-slate-500" : getStatusStyle(row.currentStatus)}`}>
+          {row.currentStatus === "-" ? "Planned" : row.currentStatus}
+        </span>
+      </div>
+    </button>
+  );
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h3 className="text-xl font-semibold text-slate-900">Content Calendar</h3>
-          <p className="text-sm text-slate-500">See planned content laid out by day for easier weekly and monthly planning.</p>
+          <p className="text-sm text-slate-500">Switch between daily, weekly, and monthly calendar views while keeping the same month in focus.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-2xl bg-slate-100 p-1">
+            {[
+              { id: "daily", label: "Daily" },
+              { id: "weekly", label: "Weekly" },
+              { id: "monthly", label: "Monthly" },
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setCalendarViewMode(mode.id)}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${calendarViewMode === mode.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
           <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev</button>
           <div className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900">{monthTitle}</div>
           <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next</button>
@@ -2141,6 +2196,88 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
         </div>
       </div>
 
+      {calendarViewMode === "daily" && (
+        <div className="space-y-3">
+          {mobileDays.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+              No posts scheduled for this month yet.
+            </div>
+          ) : (
+            mobileDays.map((day) => (
+              <div key={day.dateKey} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold text-slate-900">{day.label}</div>
+                  <div className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-slate-700">
+                    {day.rows.length} post{day.rows.length === 1 ? "" : "s"}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {day.rows.slice(0, 3).map((row) => renderCompactRowButton(row))}
+                  {day.rows.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => onSelectRow?.({ __dayOverflow: true, dayLabel: day.label, rows: day.rows.slice(3) })}
+                      className="pt-1 text-[11px] font-semibold text-slate-500 transition hover:text-slate-700"
+                    >
+                      +{day.rows.length - 3} more
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {calendarViewMode === "weekly" && (
+        <div className="space-y-4">
+          {weeklyGroups.every((group) => group.rows.length === 0) ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+              No posts scheduled for this month yet.
+            </div>
+          ) : (
+            weeklyGroups.map((group) => (
+              <div key={group.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">{group.label}</div>
+                    <div className="mt-1 text-xs text-slate-500">Weekly view across the selected month</div>
+                  </div>
+                  <div className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-slate-700">
+                    {group.rows.length} post{group.rows.length === 1 ? "" : "s"}
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  {group.days.map((day) => (
+                    <div key={day.dateKey} className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{day.dayLabel}</div>
+                      {day.rows.length === 0 ? (
+                        <div className="text-[11px] text-slate-300">No posts</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {day.rows.slice(0, 2).map((row) => renderCompactRowButton(row))}
+                          {day.rows.length > 2 && (
+                            <button
+                              type="button"
+                              onClick={() => onSelectRow?.({ __dayOverflow: true, dayLabel: day.dayLabel, rows: day.rows.slice(2) })}
+                              className="pt-1 text-[11px] font-semibold text-slate-500 transition hover:text-slate-700"
+                            >
+                              +{day.rows.length - 2} more
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {calendarViewMode === "monthly" && (
+        <>
       <div className="hidden grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
           <div key={day} className="rounded-xl bg-slate-50 px-2 py-3">{day}</div>
@@ -2266,6 +2403,8 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
           );
         })}
       </div>
+        </>
+      )}
     </div>
   );
 }
