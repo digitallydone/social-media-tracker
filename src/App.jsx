@@ -1770,17 +1770,160 @@ function EditPlanDialog({
   );
 }
 
-function StatusGuide() {
+function PlanningLogSummary({
+  rows,
+  allRows = [],
+  monthDate,
+  onChangeMonth,
+  onPreviousMonth,
+  onNextMonth,
+  onGoToCurrentMonth,
+}) {
+  const sourceRows = allRows.length ? allRows : rows;
+  const [selectedPlatform, setSelectedPlatform] = useState("All Platforms");
+  const [selectedClient, setSelectedClient] = useState("All Clients");
+  const [selectedDate, setSelectedDate] = useState("");
+
+  const platformOptions = useMemo(
+    () => Array.from(new Set(sourceRows.map((row) => row.platform).filter(Boolean))).sort(),
+    [sourceRows]
+  );
+  const clientOptions = useMemo(
+    () => Array.from(new Set(sourceRows.map((row) => row.clientName).filter(Boolean))).sort(),
+    [sourceRows]
+  );
+
+  const filteredRows = useMemo(() => {
+    return sourceRows.filter((row) => {
+      const monthMatch = monthDate ? isSameMonth(row.date, monthDate) : true;
+      const clientMatch = selectedClient === "All Clients" || row.clientName === selectedClient;
+      const platformMatch = selectedPlatform === "All Platforms" || row.platform === selectedPlatform;
+      const dateMatch = !selectedDate || row.date === selectedDate;
+      return monthMatch && clientMatch && platformMatch && dateMatch;
+    });
+  }, [sourceRows, monthDate, selectedClient, selectedPlatform, selectedDate]);
+
+  useEffect(() => {
+    if (selectedPlatform !== "All Platforms" && !platformOptions.includes(selectedPlatform)) {
+      setSelectedPlatform("All Platforms");
+    }
+  }, [platformOptions, selectedPlatform]);
+
+  useEffect(() => {
+    if (selectedClient !== "All Clients" && !clientOptions.includes(selectedClient)) {
+      setSelectedClient("All Clients");
+    }
+  }, [clientOptions, selectedClient]);
+
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h3 className="text-xl font-semibold text-slate-900">Status Guide</h3>
-      <div className="mt-5 space-y-3 text-sm text-slate-700">
-        {[...STATUS_OPTIONS, "Overdue"].map((status) => (
-          <div key={status} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-            <span>{status}</span>
-            <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(status)}`}>
-              {status}
-            </span>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-semibold text-slate-900">Planned Log</h3>
+          <p className="mt-1 text-sm text-slate-500">A filtered planning-side view of every item created from Planned Content Entry.</p>
+        </div>
+        <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{filteredRows.length} Entries</div>
+      </div>
+
+      {monthDate && (
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Planning Month</div>
+              <div className="mt-2 text-lg font-semibold text-slate-900">{formatMonthLabel(monthDate)}</div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev Month</button>
+              <input
+                type="month"
+                value={getMonthInputValue(monthDate)}
+                onChange={(event) => {
+                  const next = parseMonthInputValue(event.target.value);
+                  if (next) onChangeMonth?.(next);
+                }}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+              />
+              <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next Month</button>
+              <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Current Month</button>
+            </div>
+          </div>
+          <div className="mt-4">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setSelectedClient("All Clients")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            selectedClient === "All Clients" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700"
+          }`}
+        >
+          All Clients
+        </button>
+        {clientOptions.map((client) => (
+          <button
+            key={client}
+            type="button"
+            onClick={() => setSelectedClient(client)}
+            className={`rounded-full px-4 py-2 text-sm font-semibold ${
+              selectedClient === client ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700"
+            }`}
+          >
+            {client}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setSelectedPlatform("All Platforms")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            selectedPlatform === "All Platforms" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700"
+          }`}
+        >
+          All Platforms
+        </button>
+        {platformOptions.map((platform) => (
+          <button
+            key={platform}
+            type="button"
+            onClick={() => setSelectedPlatform(platform)}
+            className={`rounded-full px-4 py-2 text-sm font-semibold ${
+              selectedPlatform === platform ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700"
+            }`}
+          >
+            {platform}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-5 space-y-3">
+        {filteredRows.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+            No planned entries match the current month, date, client, or platform filters.
+          </div>
+        ) : filteredRows.map((row) => (
+          <div key={row.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-900">{row.topic || "-"}</div>
+                <div className="mt-1 text-xs text-slate-500">{row.clientName || "-"}</div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">{formatDateLabel(row.date)}</span>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">{row.platform}</span>
+                <span className={`inline-flex rounded-full border px-3 py-1 ${getStatusStyle(row.currentStatus)}`}>{row.currentStatus}</span>
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -4419,7 +4562,27 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                 busy={busy}
                 mode="create"
               />
-              <StatusGuide />
+              <PlanningLogSummary
+                rows={mergedPlanRows}
+                allRows={allMergedPlanRows}
+                monthDate={activeDataMonth}
+                onChangeMonth={(value) => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth(value);
+                }}
+                onPreviousMonth={() => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth((prev) => shiftMonth(prev, -1));
+                }}
+                onNextMonth={() => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth((prev) => shiftMonth(prev, 1));
+                }}
+                onGoToCurrentMonth={() => {
+                  setReportingMonthPinned(false);
+                  setActiveDataMonth(getMonthStart(new Date()));
+                }}
+              />
             </div>
           )}
 
@@ -4534,34 +4697,6 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                   </div>
                 )}
               </>
-            )}
-            {!isClientView && canEdit(currentUser) && adminWorkspace === "planning" && (
-              <PlannedContentTable
-                rows={mergedPlanRows}
-                allRows={allMergedPlanRows}
-                monthDate={activeDataMonth}
-                onChangeMonth={(value) => {
-                  setReportingMonthPinned(true);
-                  setActiveDataMonth(value);
-                }}
-                onPreviousMonth={() => {
-                  setReportingMonthPinned(true);
-                  setActiveDataMonth((prev) => shiftMonth(prev, -1));
-                }}
-                onNextMonth={() => {
-                  setReportingMonthPinned(true);
-                  setActiveDataMonth((prev) => shiftMonth(prev, 1));
-                }}
-                onGoToCurrentMonth={() => {
-                  setReportingMonthPinned(false);
-                  setActiveDataMonth(getMonthStart(new Date()));
-                }}
-                onDraftChange={updateDraft}
-                onSaveUpdate={saveDraftToStatusLog}
-                onEdit={handleEditPlan}
-                onDelete={handleDeletePlan}
-                busy={busy}
-              />
             )}
             {!isClientView && adminWorkspace === "execution" && (
               <>
