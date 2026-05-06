@@ -1743,6 +1743,10 @@ function PerformanceDashboard({
   allRecords = [],
   monthDate,
   isClientView = false,
+  selectedClientName = "All Clients",
+  clientOptions = [],
+  allClientsLabel = "All Clients",
+  onSelectClient,
   onChangeMonth,
   onPreviousMonth,
   onNextMonth,
@@ -1876,6 +1880,46 @@ function PerformanceDashboard({
           </div>
         </div>
       </div>
+
+      {clientOptions.length > 1 && (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Performance Scope</div>
+              <p className="mt-1 text-sm text-slate-500">
+                Narrow this dashboard to a specific brand, or keep it on {allClientsLabel.toLowerCase()} for the full picture.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onSelectClient?.("All Clients")}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  selectedClientName === "All Clients"
+                    ? "bg-slate-900 text-white shadow-sm"
+                    : "border border-slate-200 bg-slate-50 text-slate-700"
+                }`}
+              >
+                {allClientsLabel}
+              </button>
+              {clientOptions.map((client) => (
+                <button
+                  key={client}
+                  type="button"
+                  onClick={() => onSelectClient?.(client)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    selectedClientName === client
+                      ? "bg-slate-900 text-white shadow-sm"
+                      : "border border-slate-200 bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  {client}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {postedRows.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
@@ -3560,6 +3604,14 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                   allRecords={filteredStatusRecords}
                   monthDate={activeDataMonth}
                   isClientView
+                  selectedClientName={selectedClientName}
+                  clientOptions={
+                    currentUser?.role === "client"
+                      ? parseClientScopeList(currentUser.clientName)
+                      : accessibleClientNames
+                  }
+                  allClientsLabel={currentUser?.role === "client" ? "All My Brands" : "All Clients"}
+                  onSelectClient={setSelectedClientName}
                   onChangeMonth={(value) => {
                     setReportingMonthPinned(true);
                     setActiveDataMonth(value);
@@ -3592,6 +3644,14 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                 records={monthFilteredStatusRecords}
                 allRecords={filteredStatusRecords}
                 monthDate={activeDataMonth}
+                selectedClientName={selectedClientName}
+                clientOptions={
+                  currentUser?.role === "client"
+                    ? parseClientScopeList(currentUser.clientName)
+                    : accessibleClientNames
+                }
+                allClientsLabel={currentUser?.role === "client" ? "All My Brands" : "All Clients"}
+                onSelectClient={setSelectedClientName}
                 onChangeMonth={(value) => {
                   setReportingMonthPinned(true);
                   setActiveDataMonth(value);
