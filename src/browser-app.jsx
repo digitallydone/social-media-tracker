@@ -365,13 +365,34 @@ function parseMonthInputValue(value) {
   return new Date(year, month - 1, 1);
 }
 
+function parseDateParts(value) {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return { year: value.getFullYear(), month: value.getMonth(), day: value.getDate() };
+  }
+
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) {
+      return {
+        year: Number(match[1]),
+        month: Number(match[2]) - 1,
+        day: Number(match[3]),
+      };
+    }
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return { year: parsed.getFullYear(), month: parsed.getMonth(), day: parsed.getDate() };
+}
+
 function isSameMonth(dateValue, monthDate) {
-  if (!dateValue) return false;
-  const parsed = new Date(dateValue);
-  if (Number.isNaN(parsed.getTime())) return false;
+  const parsed = parseDateParts(dateValue);
+  if (!parsed) return false;
   return (
-    parsed.getFullYear() === monthDate.getFullYear() &&
-    parsed.getMonth() === monthDate.getMonth()
+    parsed.year === monthDate.getFullYear() &&
+    parsed.month === monthDate.getMonth()
   );
 }
 
