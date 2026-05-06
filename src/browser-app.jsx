@@ -1,6 +1,9 @@
 const { useEffect, useMemo, useState } = React;
 
+const PLATFORM_NAME = "dFlow";
+const PLATFORM_DESCRIPTOR = "Plan, execute, and report client social media work in one shared workspace.";
 const APP_TITLE = "Client Social Media Posting Tracker";
+const APP_SUBTITLE = "A Digitally Done operations module for planning, execution, and client-facing reporting.";
 const PLAN_STORAGE_KEY = "client-posting-tracker-plans";
 const STATUS_STORAGE_KEY = "client-posting-tracker-status-records";
 const SESSION_STORAGE_KEY = "client-posting-tracker-session";
@@ -35,6 +38,12 @@ const CONTENT_FORMAT_OPTIONS = [
 const STATUS_OPTIONS = ["Posted", "Awaiting Approval", "Missed", "Rescheduled"];
 const ACCESS_ROLE_OPTIONS = ["admin", "manager", "client"];
 const PERFORMANCE_METRIC_FIELDS = ["reach", "impressions", "likes", "comments", "shares", "clicks"];
+const ADMIN_WORKSPACE_SECTIONS = [
+  { id: "dashboard", label: "Dashboard", description: "Track performance, month reporting, and execution health." },
+  { id: "planning", label: "Planning", description: "Create campaigns, organize content, and manage planned posts." },
+  { id: "execution", label: "Execution", description: "Update live statuses, save results, and review delivery records." },
+  { id: "clients", label: "Clients", description: "Manage client brands, access, and rollout controls." },
+];
 
 const DEMO_USERS = [
   { id: "admin-1", name: "Richard", role: "admin", clientName: "", mode: "demo" },
@@ -880,13 +889,23 @@ function LoginScreen({
   authLoading,
 }) {
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-10">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(160,129,197,0.14),transparent_32%),linear-gradient(180deg,#f8fafc,#eef2ff_60%,#f8fafc)] p-6 md:p-10">
       <div className="mx-auto max-w-5xl space-y-8">
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
+          <div className="mb-6 flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-[1.4rem] bg-slate-950 text-2xl font-bold text-white shadow-sm">
+              d
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8f74b7]">Digitally Done Platform</div>
+              <div className="mt-1 text-2xl font-bold text-slate-950">{PLATFORM_NAME}</div>
+            </div>
+          </div>
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
             {sharedMode ? "Shared Trial Access" : "Local Demo Access"}
           </p>
           <h1 className="mt-2 text-3xl font-bold text-slate-900 md:text-4xl">{APP_TITLE}</h1>
+          <p className="mt-3 max-w-3xl text-lg font-semibold text-slate-800">{PLATFORM_DESCRIPTOR}</p>
           <p className="mt-3 max-w-3xl text-base text-slate-600">
             {sharedMode
               ? "This tracker is now ready for a remote team trial. Team members sign in with their email and work from the same shared plan and status records."
@@ -980,17 +999,27 @@ function LoginScreen({
 function DashboardHeader({ currentUser, selectedClientName, onSelectClient, clientOptions, onLogout }) {
   const allClientsLabel = currentUser.role === "client" ? "All My Brands" : "All Clients";
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+    <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
+          <div className="mb-5 flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-[1.4rem] bg-slate-950 text-2xl font-bold text-white shadow-sm">
+              d
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8f74b7]">Digitally Done Platform</div>
+              <div className="mt-1 text-2xl font-bold text-slate-950">{PLATFORM_NAME}</div>
+            </div>
+          </div>
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
             {currentUser.mode === "shared" ? "Remote Trial Dashboard" : "Client Dashboard"}
           </p>
           <h1 className="mt-2 text-3xl font-bold text-slate-900 md:text-4xl">
             {APP_TITLE}
           </h1>
+          <p className="mt-3 max-w-3xl text-lg font-semibold text-slate-800">{PLATFORM_DESCRIPTOR}</p>
           <p className="mt-2 max-w-2xl text-base text-slate-600">
-            Planned content stays separate from execution outcomes. Updates made in the planned log are only pushed to the execution log when you click Save Update.
+            {APP_SUBTITLE}
           </p>
         </div>
         <div className="flex flex-col gap-3 xl:items-end">
@@ -1024,10 +1053,53 @@ function DashboardHeader({ currentUser, selectedClientName, onSelectClient, clie
 
 function AppNotice({ message }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm text-slate-600 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-3 text-sm text-slate-600 shadow-sm backdrop-blur">
       <span className="font-semibold text-slate-900">Live Status</span>
       <span className="mx-2 text-slate-300">|</span>
       <span>{message}</span>
+    </div>
+  );
+}
+
+function WorkspaceSectionNav({ activeSection, onSelect }) {
+  return (
+    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8f74b7]">Workspace Navigation</div>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-950">Operate dFlow by area</h2>
+          <p className="mt-2 max-w-2xl text-sm text-slate-500">
+            Move between the core work areas instead of scanning one long backend. Each section below is focused on a single kind of work.
+          </p>
+        </div>
+        <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
+          {ADMIN_WORKSPACE_SECTIONS.find((section) => section.id === activeSection)?.label}
+        </div>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {ADMIN_WORKSPACE_SECTIONS.map((section) => {
+          const active = section.id === activeSection;
+          return (
+            <button
+              key={section.id}
+              type="button"
+              onClick={() => onSelect(section.id)}
+              className={`rounded-[1.5rem] border px-5 py-4 text-left transition ${
+                active
+                  ? "border-slate-950 bg-slate-950 text-white shadow-lg"
+                  : "border-slate-200 bg-slate-50 text-slate-800 hover:border-slate-300 hover:bg-white"
+              }`}
+            >
+              <div className={`text-xs font-semibold uppercase tracking-[0.16em] ${active ? "text-slate-200" : "text-[#8f74b7]"}`}>
+                {section.label}
+              </div>
+              <p className={`mt-2 text-sm leading-6 ${active ? "text-slate-100" : "text-slate-600"}`}>
+                {section.description}
+              </p>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -3443,6 +3515,7 @@ function ClientSocialMediaPostingTrackerInterface() {
   const [selectedCalendarPost, setSelectedCalendarPost] = useState(null);
   const [selectedCalendarOverflow, setSelectedCalendarOverflow] = useState(null);
   const [clientDashboardView, setClientDashboardView] = useState("performance");
+  const [adminWorkspace, setAdminWorkspace] = useState("dashboard");
 
   const sharedModeReady = hasSharedConfiguration();
   const supabase = useMemo(() => getSupabaseClient(), [sharedModeReady]);
@@ -4319,32 +4392,12 @@ function ClientSocialMediaPostingTrackerInterface() {
         {isClientView && <ClientViewBanner currentUser={currentUser} />}
         {!isClientView && <AccessSummary currentUser={currentUser} selectedClientName={selectedClientName} />}
         {!isClientView && canEdit(currentUser) && (
-          <ClientDirectoryPanel
-            clientForm={clientForm}
-            onClientFormChange={handleClientFormChange}
-            onClientSubmit={handleClientSubmit}
-            onClientEdit={handleClientEdit}
-            onClientDelete={handleClientDelete}
-            clients={visibleManagedClients}
-            busy={clientBusy}
-          />
-        )}
-        {!isClientView && sharedModeReady && currentUser.mode === "shared" && currentUser.role === "admin" && (
-          <AccessManagementPanel
-            inviteForm={inviteForm}
-            onInviteFormChange={handleInviteFormChange}
-            onInviteSubmit={handleInviteSubmit}
-            onInviteEdit={handleInviteEdit}
-            onInviteDelete={handleInviteDelete}
-            accessInvites={accessInvites}
-            inviteBusy={inviteBusy}
-            clientOptions={directoryClientNames}
-          />
+          <WorkspaceSectionNav activeSection={adminWorkspace} onSelect={setAdminWorkspace} />
         )}
 
         <div className="space-y-8">
-          {!isClientView && canEdit(currentUser) && (
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          {!isClientView && canEdit(currentUser) && adminWorkspace === "planning" && (
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Planned Content Entry</div><p className="mt-1 text-sm text-slate-600">Create the content schedule your team will execute against.</p></div>
                 <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Planned Log</div><p className="mt-1 text-sm text-slate-600">Review, edit, and update each planned row directly from the backend log.</p></div>
@@ -4353,7 +4406,7 @@ function ClientSocialMediaPostingTrackerInterface() {
             </div>
           )}
 
-          {!isClientView && canEdit(currentUser) && (
+          {!isClientView && canEdit(currentUser) && adminWorkspace === "planning" && (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
               <PlannedEntryForm
                 planForm={planForm}
@@ -4373,7 +4426,7 @@ function ClientSocialMediaPostingTrackerInterface() {
           )}
 
           <div className="space-y-8">
-            {canEdit(currentUser) && !isClientView && (
+            {canEdit(currentUser) && !isClientView && adminWorkspace === "dashboard" && (
               <DeploymentTools
                 onExport={handleExportBackup}
                 onImport={handleImportBackup}
@@ -4501,7 +4554,7 @@ function ClientSocialMediaPostingTrackerInterface() {
                 )}
               </>
             )}
-            {!isClientView && canEdit(currentUser) && (
+            {!isClientView && canEdit(currentUser) && adminWorkspace === "planning" && (
               <PlannedContentTable
                 rows={mergedPlanRows}
                 allRows={allMergedPlanRows}
@@ -4529,9 +4582,61 @@ function ClientSocialMediaPostingTrackerInterface() {
                 busy={busy}
               />
             )}
-            {!isClientView && <ExecutionStatusTable rows={summaryStatusRecords} />}
-            {!isClientView && <StatCards stats={stats} />}
-            {!isClientView && (
+            {!isClientView && adminWorkspace === "execution" && (
+              <>
+                <ExecutionStatusTable rows={summaryStatusRecords} />
+                <PerformanceDashboard
+                  rows={mergedPlanRows}
+                  allRows={allMergedPlanRows}
+                  monthDate={activeDataMonth}
+                  selectedClientName={selectedClientName}
+                  clientOptions={
+                    currentUser?.role === "client"
+                      ? parseClientScopeList(currentUser.clientName)
+                      : accessibleClientNames
+                  }
+                  allClientsLabel={currentUser?.role === "client" ? "All My Brands" : "All Clients"}
+                  onSelectClient={setSelectedClientName}
+                  onChangeMonth={(value) => {
+                    setReportingMonthPinned(true);
+                    setActiveDataMonth(value);
+                  }}
+                  onPreviousMonth={() => {
+                    setReportingMonthPinned(true);
+                    setActiveDataMonth((prev) => shiftMonth(prev, -1));
+                  }}
+                  onNextMonth={() => {
+                    setReportingMonthPinned(true);
+                    setActiveDataMonth((prev) => shiftMonth(prev, 1));
+                  }}
+                  onGoToCurrentMonth={() => {
+                    setReportingMonthPinned(false);
+                    setActiveDataMonth(getMonthStart(new Date()));
+                  }}
+                />
+              </>
+            )}
+            {!isClientView && adminWorkspace === "dashboard" && <MonthScopeControls
+              monthDate={activeDataMonth}
+              onChangeMonth={(value) => {
+                setReportingMonthPinned(true);
+                setActiveDataMonth(value);
+              }}
+              onPreviousMonth={() => {
+                setReportingMonthPinned(true);
+                setActiveDataMonth((prev) => shiftMonth(prev, -1));
+              }}
+              onNextMonth={() => {
+                setReportingMonthPinned(true);
+                setActiveDataMonth((prev) => shiftMonth(prev, 1));
+              }}
+              onGoToCurrentMonth={() => {
+                setReportingMonthPinned(false);
+                setActiveDataMonth(getMonthStart(new Date()));
+              }}
+            />}
+            {!isClientView && adminWorkspace === "dashboard" && <StatCards stats={stats} />}
+            {!isClientView && adminWorkspace === "dashboard" && (
               <PerformanceDashboard
                 rows={mergedPlanRows}
                 allRows={allMergedPlanRows}
@@ -4562,7 +4667,7 @@ function ClientSocialMediaPostingTrackerInterface() {
                 }}
               />
             )}
-            {!isClientView && (
+            {!isClientView && adminWorkspace === "planning" && (
               <CalendarView
                 rows={mergedPlanRows}
                 monthDate={calendarMonth}
@@ -4578,6 +4683,46 @@ function ClientSocialMediaPostingTrackerInterface() {
                 }}
                 compact
               />
+            )}
+            {!isClientView && adminWorkspace === "clients" && (
+              <>
+                <ClientDirectoryPanel
+                  clientForm={clientForm}
+                  onClientFormChange={handleClientFormChange}
+                  onClientSubmit={handleClientSubmit}
+                  onClientEdit={handleClientEdit}
+                  onClientDelete={handleClientDelete}
+                  clients={visibleManagedClients}
+                  busy={clientBusy}
+                />
+                {sharedModeReady && currentUser.mode === "shared" && currentUser.role === "admin" && (
+                  <AccessManagementPanel
+                    inviteForm={inviteForm}
+                    onInviteFormChange={handleInviteFormChange}
+                    onInviteSubmit={handleInviteSubmit}
+                    onInviteEdit={handleInviteEdit}
+                    onInviteDelete={handleInviteDelete}
+                    accessInvites={accessInvites}
+                    inviteBusy={inviteBusy}
+                    clientOptions={directoryClientNames}
+                  />
+                )}
+                <DeploymentTools
+                  onExport={handleExportBackup}
+                  onImport={handleImportBackup}
+                  onResetData={handleResetData}
+                  hasData={plans.length > 0 || statusRecords.length > 0}
+                  isClientView={isClientView}
+                  sharedModeReady={sharedModeReady}
+                  onToggleClientView={() => {
+                    const next = !isClientView;
+                    setIsClientView(next);
+                    if (!next) setSelectedCalendarPost(null);
+                    setSelectedCalendarOverflow(null);
+                    setNotice(next ? "Client view enabled." : "Admin view enabled.");
+                  }}
+                />
+              </>
             )}
             {canEdit(currentUser) && isClientView && (
               <DeploymentTools
@@ -4596,7 +4741,7 @@ function ClientSocialMediaPostingTrackerInterface() {
                 }}
               />
             )}
-            {!isClientView && (
+            {!isClientView && adminWorkspace === "dashboard" && (
               <SnapshotPanel
                 snapshotView={snapshotView}
                 onToggle={setSnapshotView}

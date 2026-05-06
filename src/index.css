@@ -2,6 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
+@layer base {
+  :root {
+    --df-accent: #8f74b7;
+    --df-accent-soft: #efe8f8;
+    --df-ink: #09090b;
+    --df-navy: #172036;
+    --df-surface: #f7f8fc;
+  }
+
+  html {
+    background: var(--df-surface);
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Open Sans", ui-sans-serif, system-ui, sans-serif;
+    color: var(--df-navy);
+    background:
+      radial-gradient(circle at top, rgba(143, 116, 183, 0.12), transparent 28%),
+      linear-gradient(180deg, #f9fafb 0%, #f4f6fb 48%, #f9fafb 100%);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, color 160ms ease, transform 160ms ease;
+  }
+
+  ::selection {
+    background: rgba(143, 116, 183, 0.22);
+  }
 }
