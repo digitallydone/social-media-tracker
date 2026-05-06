@@ -6,6 +6,7 @@ const STATUS_STORAGE_KEY = "client-posting-tracker-status-records";
 const SESSION_STORAGE_KEY = "client-posting-tracker-session";
 const STATUS_DRAFTS_STORAGE_KEY = "client-posting-tracker-status-drafts";
 const CLIENT_DIRECTORY_STORAGE_KEY = "client-posting-tracker-client-directory";
+const LEGACY_DEMO_CLIENT_NAMES = ["Acme Client", "Beta Foods"];
 
 const PLATFORM_OPTIONS = [
   "Instagram",
@@ -38,7 +39,7 @@ const PERFORMANCE_METRIC_FIELDS = ["reach", "impressions", "likes", "comments", 
 const DEMO_USERS = [
   { id: "admin-1", name: "Richard", role: "admin", clientName: "", mode: "demo" },
   { id: "manager-1", name: "Team Lead", role: "manager", clientName: "", mode: "demo" },
-  { id: "client-1", name: "Acme Client", role: "client", clientName: "Acme Client", mode: "demo" },
+  { id: "client-1", name: "Demo Client", role: "client", clientName: "", mode: "demo" },
 ];
 
 const EMPTY_PLAN_FORM = {
@@ -692,6 +693,15 @@ function getAccessibleClientNames(plans) {
 
 function getManagedClientNames(clients) {
   return Array.from(new Set(clients.map((client) => client.name).filter(Boolean))).sort();
+}
+
+function isLegacyDemoClient(name) {
+  return LEGACY_DEMO_CLIENT_NAMES.includes(String(name || "").trim());
+}
+
+function getSelectedScopeLabels(selectedClientName, clientOptions, allClientsLabel) {
+  if (selectedClientName && selectedClientName !== "All Clients") return [selectedClientName];
+  return clientOptions.length ? clientOptions : [allClientsLabel];
 }
 
 function parseClientScopeList(value) {
@@ -2030,6 +2040,28 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onGoToTod
   );
 }
 
+function ClientScopePanel({ title, description, selectedClientName, clientOptions, allClientsLabel = "All Clients" }) {
+  const scopeLabels = getSelectedScopeLabels(selectedClientName, clientOptions, allClientsLabel);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{title}</div>
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {scopeLabels.map((label) => (
+            <span key={label} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PerformanceDashboard({
   rows,
   allRows = [],
@@ -2946,8 +2978,23 @@ function ExecutionStatusTable({ rows }) {
   );
 }
 
-function SnapshotPanel({ snapshotView, onToggle, activeSummary }) {
+function SnapshotPanel({
+  snapshotView,
+  onToggle,
+  activeSummary,
+  monthDate,
+  onChangeMonth,
+  onPreviousMonth,
+  onNextMonth,
+  onGoToCurrentMonth,
+  selectedClientName = "All Clients",
+  clientOptions = [],
+  allClientsLabel = "All Clients",
+  isClientView = false,
+}) {
   const [selectedPeriod, setSelectedPeriod] = useState("");
+  const monthLabel = monthDate ? formatMonthLabel(monthDate) : "";
+  const scopeLabels = getSelectedScopeLabels(selectedClientName, clientOptions, allClientsLabel);
 
   useEffect(() => {
     if (!activeSummary.length) {
@@ -3011,7 +3058,7 @@ function SnapshotPanel({ snapshotView, onToggle, activeSummary }) {
       <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-            Dashboard View
+            {isClientView ? "Client Dashboard" : "Dashboard View"}
           </p>
           <h3 className="mt-2 text-2xl font-semibold text-slate-900">
             Plan vs Execution
@@ -3051,6 +3098,54 @@ function SnapshotPanel({ snapshotView, onToggle, activeSummary }) {
           </button>
         </div>
       </div>
+
+      {monthDate && (
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Reporting Month</div>
+              <div className="mt-2 text-lg font-semibold text-slate-900">{monthLabel}</div>
+              <p className="mt-1 text-sm text-slate-500">
+                Switch months here to compare plan versus execution outside the current month.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev Month</button>
+              <input
+                type="month"
+                value={getMonthInputValue(monthDate)}
+                onChange={(event) => {
+                  const next = parseMonthInputValue(event.target.value);
+                  if (next) onChangeMonth?.(next);
+                }}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+              />
+              <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next Month</button>
+              <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Current Month</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scopeLabels.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Brand Scope</div>
+              <p className="mt-1 text-sm text-slate-500">
+                This dashboard is currently showing the selected client brand scope below.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {scopeLabels.map((label) => (
+                <span key={label} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {activeSummary.length === 0 || !featuredPeriod ? (
         <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
@@ -3311,13 +3406,26 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     window.localStorage.setItem(CLIENT_DIRECTORY_STORAGE_KEY, JSON.stringify(managedClients));
   }, [managedClients, sharedModeReady]);
 
+  const shouldHideLegacyDemoClients = currentUser?.mode === "shared" || managedClients.length > 0;
+  const visiblePlans = useMemo(
+    () => shouldHideLegacyDemoClients ? plans.filter((plan) => !isLegacyDemoClient(plan.clientName)) : plans,
+    [plans, shouldHideLegacyDemoClients]
+  );
+  const visibleStatusRecords = useMemo(
+    () => shouldHideLegacyDemoClients ? statusRecords.filter((record) => !isLegacyDemoClient(record.clientName)) : statusRecords,
+    [statusRecords, shouldHideLegacyDemoClients]
+  );
+  const visibleManagedClients = useMemo(
+    () => shouldHideLegacyDemoClients ? managedClients.filter((client) => !isLegacyDemoClient(client.name)) : managedClients,
+    [managedClients, shouldHideLegacyDemoClients]
+  );
   const accessibleClientNames = useMemo(
-    () => Array.from(new Set([...getAccessibleClientNames(plans), ...getManagedClientNames(managedClients)])).sort(),
-    [plans, managedClients]
+    () => Array.from(new Set([...getAccessibleClientNames(visiblePlans), ...getManagedClientNames(visibleManagedClients)])).sort(),
+    [visiblePlans, visibleManagedClients]
   );
   const directoryClientNames = useMemo(
-    () => getManagedClientNames(managedClients),
-    [managedClients]
+    () => getManagedClientNames(visibleManagedClients),
+    [visibleManagedClients]
   );
 
   useEffect(() => {
@@ -3499,25 +3607,25 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     if (!currentUser) return [];
     if (currentUser.role === "client") {
       const clientScopes = parseClientScopeList(currentUser.clientName);
-      const scopedPlans = plans.filter((plan) => clientScopes.includes(plan.clientName));
+      const scopedPlans = visiblePlans.filter((plan) => clientScopes.includes(plan.clientName));
       if (selectedClientName === "All Clients") return scopedPlans;
       return scopedPlans.filter((plan) => plan.clientName === selectedClientName);
     }
-    if (selectedClientName === "All Clients") return plans;
-    return plans.filter((plan) => plan.clientName === selectedClientName);
-  }, [plans, currentUser, selectedClientName]);
+    if (selectedClientName === "All Clients") return visiblePlans;
+    return visiblePlans.filter((plan) => plan.clientName === selectedClientName);
+  }, [visiblePlans, currentUser, selectedClientName]);
 
   const filteredStatusRecords = useMemo(() => {
     if (!currentUser) return [];
     if (currentUser.role === "client") {
       const clientScopes = parseClientScopeList(currentUser.clientName);
-      const scopedRecords = statusRecords.filter((record) => clientScopes.includes(record.clientName));
+      const scopedRecords = visibleStatusRecords.filter((record) => clientScopes.includes(record.clientName));
       if (selectedClientName === "All Clients") return scopedRecords;
       return scopedRecords.filter((record) => record.clientName === selectedClientName);
     }
-    if (selectedClientName === "All Clients") return statusRecords;
-    return statusRecords.filter((record) => record.clientName === selectedClientName);
-  }, [statusRecords, currentUser, selectedClientName]);
+    if (selectedClientName === "All Clients") return visibleStatusRecords;
+    return visibleStatusRecords.filter((record) => record.clientName === selectedClientName);
+  }, [visibleStatusRecords, currentUser, selectedClientName]);
 
   const monthFilteredPlans = useMemo(() => {
     return filteredPlans.filter((plan) => isSameMonth(plan.date, activeDataMonth));
@@ -4156,7 +4264,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
             onClientSubmit={handleClientSubmit}
             onClientEdit={handleClientEdit}
             onClientDelete={handleClientDelete}
-            clients={managedClients}
+            clients={visibleManagedClients}
             busy={clientBusy}
           />
         )}
@@ -4238,6 +4346,13 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                   >
                     Plan vs Execution
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setClientDashboardView("calendar")}
+                    className={`rounded-xl px-4 py-2 text-sm font-semibold ${clientDashboardView === "calendar" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
+                  >
+                    Content Calendar
+                  </button>
                 </div>
                 {clientDashboardView === "performance" ? (
                   <PerformanceDashboard
@@ -4270,8 +4385,58 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                       setActiveDataMonth(getMonthStart(new Date()));
                     }}
                   />
+                ) : clientDashboardView === "snapshot" ? (
+                  <SnapshotPanel
+                    snapshotView={snapshotView}
+                    onToggle={setSnapshotView}
+                    activeSummary={activeSummary}
+                    monthDate={activeDataMonth}
+                    selectedClientName={selectedClientName}
+                    clientOptions={parseClientScopeList(currentUser.clientName)}
+                    allClientsLabel="All My Brands"
+                    isClientView
+                    onChangeMonth={(value) => {
+                      setReportingMonthPinned(true);
+                      setActiveDataMonth(value);
+                    }}
+                    onPreviousMonth={() => {
+                      setReportingMonthPinned(true);
+                      setActiveDataMonth((prev) => shiftMonth(prev, -1));
+                    }}
+                    onNextMonth={() => {
+                      setReportingMonthPinned(true);
+                      setActiveDataMonth((prev) => shiftMonth(prev, 1));
+                    }}
+                    onGoToCurrentMonth={() => {
+                      setReportingMonthPinned(false);
+                      setActiveDataMonth(getMonthStart(new Date()));
+                    }}
+                  />
                 ) : (
-                  <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />
+                  <div className="space-y-4">
+                    <ClientScopePanel
+                      title="Calendar Scope"
+                      description="The calendar below reflects the selected brands for this client view."
+                      selectedClientName={selectedClientName}
+                      clientOptions={parseClientScopeList(currentUser.clientName)}
+                      allClientsLabel="All My Brands"
+                    />
+                    <CalendarView
+                      rows={mergedPlanRows}
+                      monthDate={calendarMonth}
+                      onPreviousMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                      onNextMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                      onGoToToday={() => setCalendarMonth(new Date())}
+                      onSelectRow={(payload) => {
+                        if (payload?.__dayOverflow) {
+                          setSelectedCalendarOverflow(payload);
+                          return;
+                        }
+                        setSelectedCalendarPost(payload);
+                      }}
+                      compact
+                    />
+                  </div>
                 )}
               </>
             )}
@@ -4311,21 +4476,23 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                 }}
               />
             )}
-            <CalendarView
-              rows={mergedPlanRows}
-              monthDate={calendarMonth}
-              onPreviousMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-              onNextMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-              onGoToToday={() => setCalendarMonth(new Date())}
-              onSelectRow={(payload) => {
-                if (payload?.__dayOverflow) {
-                  setSelectedCalendarOverflow(payload);
-                  return;
-                }
-                setSelectedCalendarPost(payload);
-              }}
-              compact
-            />
+            {!isClientView && (
+              <CalendarView
+                rows={mergedPlanRows}
+                monthDate={calendarMonth}
+                onPreviousMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                onNextMonth={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                onGoToToday={() => setCalendarMonth(new Date())}
+                onSelectRow={(payload) => {
+                  if (payload?.__dayOverflow) {
+                    setSelectedCalendarOverflow(payload);
+                    return;
+                  }
+                  setSelectedCalendarPost(payload);
+                }}
+                compact
+              />
+            )}
             {canEdit(currentUser) && isClientView && (
               <DeploymentTools
                 onExport={handleExportBackup}
@@ -4343,7 +4510,33 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                 }}
               />
             )}
-            {!isClientView && <SnapshotPanel snapshotView={snapshotView} onToggle={setSnapshotView} activeSummary={activeSummary} />}
+            {!isClientView && (
+              <SnapshotPanel
+                snapshotView={snapshotView}
+                onToggle={setSnapshotView}
+                activeSummary={activeSummary}
+                monthDate={activeDataMonth}
+                selectedClientName={selectedClientName}
+                clientOptions={accessibleClientNames}
+                allClientsLabel="All Clients"
+                onChangeMonth={(value) => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth(value);
+                }}
+                onPreviousMonth={() => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth((prev) => shiftMonth(prev, -1));
+                }}
+                onNextMonth={() => {
+                  setReportingMonthPinned(true);
+                  setActiveDataMonth((prev) => shiftMonth(prev, 1));
+                }}
+                onGoToCurrentMonth={() => {
+                  setReportingMonthPinned(false);
+                  setActiveDataMonth(getMonthStart(new Date()));
+                }}
+              />
+            )}
           </div>
         </div>
       </div>
