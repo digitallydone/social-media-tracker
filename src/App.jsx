@@ -3872,19 +3872,6 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     }
   }, [currentUser, accessibleClientNames, selectedClientName]);
 
-  useEffect(() => {
-    if (reportingMonthPinned) return undefined;
-    const syncMonthToCurrent = () => {
-      const currentMonth = getMonthStart(new Date());
-      if (!isSameMonth(activeDataMonth, currentMonth)) {
-        setActiveDataMonth(currentMonth);
-      }
-    };
-    syncMonthToCurrent();
-    const intervalId = window.setInterval(syncMonthToCurrent, 60 * 1000);
-    return () => window.clearInterval(intervalId);
-  }, [activeDataMonth, reportingMonthPinned]);
-
   async function loadRemoteSession() {
     if (!supabase) return;
     setSyncState("connecting");
@@ -4139,15 +4126,37 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       time: planForm.platformTimes[platform] || "",
       format: (planForm.platformFormats[platform] || "").trim(),
     }));
+    const singleUpdatedEntry = withPlanId({
+      ...baseEntry,
+      id: editingPlanId || undefined,
+      platform: planForm.platforms[0] || "Instagram",
+      time: planForm.platformTimes[planForm.platforms[0]] || "",
+      format: (planForm.platformFormats[planForm.platforms[0]] || "").trim(),
+    });
 
     if (sharedModeReady && currentUser?.mode === "shared" && supabase) {
       setBusy(true);
       try {
         if (editingPlanId) {
-          const { error: deleteError } = await supabase.from("plans").delete().eq("id", editingPlanId);
-          if (deleteError) throw deleteError;
-          const { error: insertError } = await supabase.from("plans").insert(entries.map((entry) => toDbPlan(entry, currentUser.id)));
-          if (insertError) throw insertError;
+          const { error: updateError } = await supabase
+            .from("plans")
+            .update(toDbPlan(singleUpdatedEntry, currentUser.id))
+            .eq("id", editingPlanId);
+          if (updateError) throw updateError;
+          const { error: statusSyncError } = await supabase
+            .from("status_records")
+            .update({
+              client_name: singleUpdatedEntry.clientName,
+              campaign: singleUpdatedEntry.campaign || null,
+              date: singleUpdatedEntry.date,
+              platform: singleUpdatedEntry.platform,
+              topic: singleUpdatedEntry.topic,
+              format: singleUpdatedEntry.format || null,
+              time: singleUpdatedEntry.time || null,
+              updated_by: currentUser.id,
+            })
+            .eq("plan_id", editingPlanId);
+          if (statusSyncError) throw statusSyncError;
           setNotice("Planned entry updated in shared workspace.");
         } else {
           const { error: insertError } = await supabase.from("plans").insert(entries.map((entry) => toDbPlan(entry, currentUser.id)));
@@ -4166,13 +4175,23 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     }
 
     if (editingPlanId !== null) {
-      const editingPlan = plans.find((item) => item.id === editingPlanId);
-      setPlans((prev) => updatePlanState(prev, editingPlanId, entries));
-      if (editingPlan) {
-        const deleted = deletePlanState([], statusRecords, statusDrafts, editingPlan.id);
-        setStatusRecords(deleted.statusRecords);
-        setStatusDrafts(deleted.statusDrafts);
-      }
+      setPlans((prev) => prev.map((item) => (item.id === editingPlanId ? singleUpdatedEntry : item)));
+      setStatusRecords((prev) =>
+        prev.map((record) =>
+          record.planId === editingPlanId
+            ? {
+                ...record,
+                clientName: singleUpdatedEntry.clientName,
+                campaign: singleUpdatedEntry.campaign || "",
+                date: singleUpdatedEntry.date,
+                platform: singleUpdatedEntry.platform,
+                topic: singleUpdatedEntry.topic,
+                format: singleUpdatedEntry.format || "",
+                time: singleUpdatedEntry.time || "",
+              }
+            : record
+        )
+      );
       setEditingPlanId(null);
       setNotice("Planned entry updated.");
     } else {
@@ -4719,6 +4738,23 @@ export default function ClientSocialMediaPostingTrackerInterface() {
         {!sharedModeReady && <SharedSetupPanel />}
         {isClientView && <ClientViewBanner currentUser={currentUser} />}
         {!isClientView && <AccessSummary currentUser={currentUser} selectedClientName={selectedClientName} />}
+        {canEdit(currentUser) && currentUser?.role !== "client" && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !isClientView;
+                setIsClientView(next);
+                if (!next) setSelectedCalendarPost(null);
+                setSelectedCalendarOverflow(null);
+                setNotice(next ? "Client view enabled." : "Admin view enabled.");
+              }}
+              className="rounded-2xl border border-[#D8CCE9] bg-white px-4 py-2 text-sm font-semibold text-[#1C1C3F] shadow-sm"
+            >
+              {isClientView ? "Switch to Admin View" : "Switch to Client View"}
+            </button>
+          </div>
+        )}
         {!isClientView && canEdit(currentUser) && (
           <WorkspaceSectionNav activeSection={adminWorkspace} onSelect={setAdminWorkspace} />
         )}
