@@ -889,53 +889,46 @@ function LoginScreen({
   authLoading,
 }) {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(138,100,180,0.18),transparent_30%),radial-gradient(circle_at_85%_0%,_rgba(244,180,0,0.14),transparent_22%),linear-gradient(180deg,#fcfbff,#f5f0fb_52%,#fcfbff)] p-6 md:p-10">
-      <div className="mx-auto max-w-5xl space-y-8">
-        <div className="overflow-hidden rounded-[2.25rem] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(228,216,245,0.8))] p-8 shadow-[0_24px_70px_rgba(28,28,63,0.12)] backdrop-blur">
-          <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#1C1C3F_0%,#8A64B4_52%,#F4B400_100%)]" />
-          <div className="relative mb-6 flex items-center gap-5">
-            <div className="flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-[#1C1C3F] text-xl font-bold text-white shadow-[0_18px_32px_rgba(28,28,63,0.22)]">
+    <div className="min-h-screen p-4 md:p-8">
+      <div className="mx-auto max-w-4xl space-y-5">
+        <div className="relative overflow-hidden rounded-2xl border border-[#E4D8F5] bg-white px-6 py-5 shadow-sm">
+          <div className="absolute inset-x-0 top-0 h-[3px] bg-[linear-gradient(90deg,#1C1C3F_0%,#8A64B4_52%,#F4B400_100%)]" />
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-[#1C1C3F] text-lg font-bold text-white shadow-[0_8px_20px_rgba(28,28,63,0.22)]">
               SF
             </div>
             <div>
-              <div className="inline-flex items-center rounded-full border border-[#8A64B4]/20 bg-white/75 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8A64B4]">
-                Digitally Done Platform
+              <div className="flex items-center gap-2">
+                <div className="text-xl font-bold text-[#1C1C3F]">{PLATFORM_NAME}</div>
+                <span className="rounded-full border border-[#8A64B4]/20 bg-[#faf7fe] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8A64B4]">
+                  {sharedMode ? "Shared Trial" : "Demo"}
+                </span>
               </div>
-              <div className="mt-3 text-3xl font-bold text-[#1C1C3F] md:text-4xl">{PLATFORM_NAME}</div>
-              <div className="mt-1 text-base font-semibold text-[#43506e]">by Digitally Done</div>
+              <div className="mt-0.5 text-sm font-medium text-[#51617f]">{PLATFORM_DESCRIPTOR}</div>
             </div>
           </div>
-          <p className="text-sm font-medium uppercase tracking-[0.24em] text-[#8A64B4]">
-            {sharedMode ? "Shared Trial Access" : "Local Demo Access"}
-          </p>
-          <p className="mt-4 max-w-3xl text-xl font-semibold leading-8 text-[#1C1C3F]">{PLATFORM_DESCRIPTOR}</p>
-          <p className="mt-3 max-w-3xl text-base leading-7 text-[#51617f]">
-            {sharedMode
-              ? "This tracker is now ready for a remote team trial. Team members sign in with their email and work from the same shared plan and status records."
-              : "This is still running in browser-local demo mode. Add the shared backend configuration to switch everyone onto the same remote workspace."}
-          </p>
         </div>
 
         {sharedMode ? (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(320px,1fr)]">
-            <div className="rounded-[2rem] border border-white/70 bg-white/90 p-8 shadow-[0_16px_50px_rgba(28,28,63,0.09)] backdrop-blur">
-              <h2 className="text-2xl font-semibold text-slate-900">Team Sign In</h2>
-              <p className="mt-2 text-sm text-slate-600">
-                Enter an invited team email. The app will send a magic link so each person can securely open the shared trial workspace.
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(280px,1fr)]">
+            <div className="rounded-2xl border border-[#E4D8F5] bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-900">Team Sign In</h2>
+              <p className="mt-1.5 text-sm text-slate-500">
+                Enter an invited team email to receive a magic link for the shared workspace.
               </p>
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
                   onRequestMagicLink();
                 }}
-                className="mt-6 space-y-4"
+                className="mt-4 space-y-3"
               >
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Work Email</label>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Work Email</label>
                   <input
                     value={authEmail}
                     onChange={(event) => onAuthEmailChange(event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#8A64B4]"
                     placeholder="name@yourcompany.com"
                     type="email"
                   />
@@ -943,47 +936,52 @@ function LoginScreen({
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="rounded-2xl bg-[#1C1C3F] px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(28,28,63,0.18)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-xl bg-[#1C1C3F] px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {authLoading ? "Sending Link..." : "Send Magic Link"}
                 </button>
               </form>
               {authNotice && (
-                <div className="mt-4 rounded-2xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-3 text-sm text-slate-600">
+                <div className="mt-3 rounded-xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-2.5 text-sm text-slate-600">
                   {authNotice}
                 </div>
               )}
             </div>
 
-            <div className="rounded-[2rem] border border-white/70 bg-white/90 p-8 shadow-[0_16px_50px_rgba(28,28,63,0.09)] backdrop-blur">
-              <h3 className="text-xl font-semibold text-slate-900">Shared Trial Checklist</h3>
-              <div className="mt-5 space-y-3 text-sm text-slate-700">
-                <div className="rounded-2xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-3">1. Add invited team emails with role and client scope.</div>
-                <div className="rounded-2xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-3">2. Team members enter their email and receive a magic link.</div>
-                <div className="rounded-2xl border border-[#F4B400]/20 bg-[#FFF8E6] px-4 py-3">3. Send the hosted URL to the pilot team.</div>
-                <div className="rounded-2xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-3">4. Monitor activity using the shared logs and timestamps.</div>
+            <div className="rounded-2xl border border-[#E4D8F5] bg-white p-6 shadow-sm">
+              <h3 className="text-base font-semibold text-slate-900">Shared Trial Checklist</h3>
+              <div className="mt-3 space-y-2 text-sm text-slate-600">
+                <div className="rounded-xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-2.5">1. Add invited team emails with role and client scope.</div>
+                <div className="rounded-xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-2.5">2. Team members enter their email and receive a magic link.</div>
+                <div className="rounded-xl border border-[#F4B400]/20 bg-[#FFF8E6] px-4 py-2.5">3. Send the hosted URL to the pilot team.</div>
+                <div className="rounded-xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-2.5">4. Monitor activity using the shared logs and timestamps.</div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {users.map((user) => (
               <button
                 key={user.id}
                 type="button"
                 onClick={() => onLogin(user)}
-                className="rounded-[1.8rem] border border-white/70 bg-white/92 p-6 text-left shadow-[0_16px_40px_rgba(28,28,63,0.08)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_50px_rgba(28,28,63,0.12)]"
+                className="rounded-2xl border border-[#E4D8F5] bg-white p-5 text-left shadow-sm transition hover:border-[#8A64B4]/40 hover:shadow-md"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-semibold text-slate-900">{user.name}</div>
-                    <div className="mt-1 text-sm text-slate-500">{user.role.toUpperCase()}</div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#1C1C3F] text-sm font-bold text-white">
+                      {user.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-slate-900">{user.name}</div>
+                      <div className="text-xs text-[#8A64B4] font-semibold uppercase tracking-wide">{user.role}</div>
+                    </div>
                   </div>
-                  <div className="rounded-full border border-[#E4D8F5] bg-[#FAF7FE] px-3 py-1 text-xs font-semibold text-[#8A64B4]">
-                    Demo Sign In
-                  </div>
+                  <span className="rounded-full border border-[#E4D8F5] bg-[#faf7fe] px-2.5 py-1 text-[10px] font-semibold text-[#8A64B4]">
+                    Sign In
+                  </span>
                 </div>
-                <p className="mt-4 text-sm text-slate-600">
+                <p className="mt-3 text-sm text-slate-500">
                   {user.role === "client"
                     ? `View only for ${user.clientName}`
                     : user.role === "manager"
@@ -1002,54 +1000,42 @@ function LoginScreen({
 function DashboardHeader({ currentUser, selectedClientName, onSelectClient, clientOptions, onLogout }) {
   const allClientsLabel = currentUser.role === "client" ? "All My Brands" : "All Clients";
   return (
-    <div className="relative overflow-hidden rounded-[2.25rem] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.97),rgba(228,216,245,0.78))] p-8 shadow-[0_26px_72px_rgba(28,28,63,0.12)] backdrop-blur">
-      <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#1C1C3F_0%,#8A64B4_58%,#F4B400_100%)]" />
-      <div className="absolute right-0 top-0 h-44 w-44 rounded-full bg-[#F4B400]/10 blur-3xl" />
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <div className="relative mb-5 flex items-center gap-5">
-            <div className="flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-[#1C1C3F] text-xl font-bold text-white shadow-[0_18px_32px_rgba(28,28,63,0.22)]">
-              SF
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-[#1C1C3F] md:text-4xl">{PLATFORM_NAME}</div>
-              <div className="mt-1 text-base font-semibold text-[#43506e]">by Digitally Done</div>
-            </div>
+    <div className="relative overflow-hidden rounded-2xl border border-[#E4D8F5] bg-white px-5 py-3 shadow-sm">
+      <div className="absolute inset-x-0 top-0 h-[3px] bg-[linear-gradient(90deg,#1C1C3F_0%,#8A64B4_58%,#F4B400_100%)]" />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#1C1C3F] text-sm font-bold text-white">
+            SF
           </div>
-          <p className="text-sm font-medium uppercase tracking-[0.24em] text-[#8A64B4]">
-            {currentUser.mode === "shared" ? "Remote Trial Dashboard" : "Client Dashboard"}
-          </p>
-          <div className="mt-4 inline-flex items-center rounded-full border border-[#8A64B4]/20 bg-white/75 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8A64B4]">
-            Digitally Done Platform
+          <div>
+            <div className="text-base font-bold leading-tight text-[#1C1C3F]">{PLATFORM_NAME}</div>
+            <div className="text-[11px] font-medium text-[#8A64B4]">by Digitally Done</div>
           </div>
-          <p className="mt-4 max-w-3xl text-xl font-semibold leading-8 text-[#1C1C3F]">{PLATFORM_DESCRIPTOR}</p>
-          <p className="mt-2 max-w-2xl text-base leading-7 text-[#51617f]">
-            Social media planning, execution, and reporting are now organized into clearer workspace areas for faster navigation.
-          </p>
         </div>
-        <div className="flex flex-col gap-3 xl:items-end">
-          <div className="rounded-[1.6rem] border border-white/70 bg-white/82 px-5 py-4 text-sm text-slate-700 shadow-[0_12px_32px_rgba(28,28,63,0.08)] backdrop-blur">
-            <div className="font-semibold text-[#1C1C3F]">Signed in as {currentUser.name}</div>
-            <div>{currentUser.role.toUpperCase()}</div>
-            {currentUser.email && <div className="mt-1 text-xs text-slate-500">{currentUser.email}</div>}
+        <div className="flex flex-wrap items-center gap-2">
+          {clientOptions.length > 1 && (
+            <select
+              value={selectedClientName}
+              onChange={(e) => onSelectClient(e.target.value)}
+              className="rounded-xl border border-[#D8CCE9] bg-[#faf7fe] px-3 py-1.5 text-sm font-semibold text-[#1C1C3F] outline-none focus:border-[#8A64B4]"
+            >
+              <option value="All Clients">{allClientsLabel}</option>
+              {clientOptions.map((client) => (
+                <option key={client} value={client}>{client}</option>
+              ))}
+            </select>
+          )}
+          <div className="flex items-center gap-2 rounded-xl border border-[#E4D8F5] bg-[#faf7fe] px-3 py-1.5">
+            <span className="text-sm font-semibold text-[#1C1C3F]">{currentUser.name}</span>
+            <span className="rounded-full bg-[#1C1C3F] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">{currentUser.role}</span>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {clientOptions.length > 1 && (
-              <select
-                value={selectedClientName}
-                onChange={(e) => onSelectClient(e.target.value)}
-                className="rounded-2xl border border-[#D8CCE9] bg-white/90 px-4 py-2 text-sm font-semibold text-[#1C1C3F]"
-              >
-                <option value="All Clients">{allClientsLabel}</option>
-                {clientOptions.map((client) => (
-                  <option key={client} value={client}>{client}</option>
-                ))}
-              </select>
-            )}
-            <button type="button" onClick={onLogout} className="rounded-2xl border border-[#D8CCE9] bg-white/90 px-4 py-2 text-sm font-semibold text-[#1C1C3F]">
-              Log Out
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="rounded-xl border border-[#D8CCE9] bg-white px-3 py-1.5 text-sm font-semibold text-[#1C1C3F] hover:bg-slate-50"
+          >
+            Log Out
+          </button>
         </div>
       </div>
     </div>
@@ -1057,10 +1043,10 @@ function DashboardHeader({ currentUser, selectedClientName, onSelectClient, clie
 }
 
 function AppNotice({ message }) {
+  if (!message || message === "Ready for deployment.") return null;
   return (
-    <div className="rounded-[1.6rem] border border-[#E4D8F5] bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(228,216,245,0.72))] px-5 py-3 text-sm text-slate-600 shadow-[0_12px_30px_rgba(28,28,63,0.07)] backdrop-blur">
-      <span className="font-semibold text-[#1C1C3F]">Live Status</span>
-      <span className="mx-2 text-[#8A64B4]">•</span>
+    <div className="flex items-center gap-2 rounded-xl border border-[#E4D8F5] bg-[#faf7fe] px-4 py-2 text-sm text-slate-600">
+      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#8A64B4]" />
       <span>{message}</span>
     </div>
   );
@@ -1068,85 +1054,63 @@ function AppNotice({ message }) {
 
 function WorkspaceSectionNav({ activeSection, onSelect }) {
   return (
-    <div className="rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(228,216,245,0.55))] p-5 shadow-[0_20px_48px_rgba(28,28,63,0.09)] backdrop-blur">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8e69be]">Workspace Navigation</div>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-950">Operate Social Media Flow Board by area</h2>
-          <p className="mt-2 max-w-2xl text-sm text-slate-500">
-            Move between the core work areas instead of scanning one long backend. Each section below is focused on a single kind of work.
-          </p>
-        </div>
-        <div className="rounded-full border border-[#E4D8F5] bg-white/80 px-4 py-2 text-sm font-semibold text-[#1C1C3F]">
-          {ADMIN_WORKSPACE_SECTIONS.find((section) => section.id === activeSection)?.label}
-        </div>
-      </div>
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        {ADMIN_WORKSPACE_SECTIONS.map((section) => {
-          const active = section.id === activeSection;
-          return (
-            <button
-              key={section.id}
-              type="button"
-              onClick={() => onSelect(section.id)}
-              className={`rounded-[1.5rem] border px-5 py-4 text-left transition ${
-                active
-                  ? "border-[#1C1C3F] bg-[linear-gradient(135deg,#1C1C3F,#2a2a59)] text-white shadow-[0_18px_36px_rgba(28,28,63,0.22)]"
-                  : "border-[#E4D8F5] bg-white/88 text-slate-800 hover:border-[#8A64B4]/40 hover:bg-white"
-              }`}
-            >
-              <div className={`text-xs font-semibold uppercase tracking-[0.16em] ${active ? "text-[#E4D8F5]" : "text-[#8A64B4]"}`}>
-                {section.label}
-              </div>
-              <p className={`mt-2 text-sm leading-6 ${active ? "text-slate-100" : "text-slate-600"}`}>
-                {section.description}
-              </p>
-            </button>
-          );
-        })}
-      </div>
+    <div className="flex items-center gap-1 rounded-2xl border border-[#E4D8F5] bg-white p-1.5 shadow-sm">
+      {ADMIN_WORKSPACE_SECTIONS.map((section) => {
+        const active = section.id === activeSection;
+        return (
+          <button
+            key={section.id}
+            type="button"
+            onClick={() => onSelect(section.id)}
+            title={section.description}
+            className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              active
+                ? "bg-[#1C1C3F] text-white shadow-sm"
+                : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            {section.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
 function ModeBanner({ currentUser, sharedModeReady, syncState }) {
   return (
-    <div className={`rounded-[1.8rem] border p-5 shadow-[0_14px_34px_rgba(28,28,63,0.07)] ${sharedModeReady ? "border-[#d9efe2] bg-[linear-gradient(135deg,#f7fffb,#ecfbf1)]" : "border-[#f3ddb0] bg-[linear-gradient(135deg,#fffaf0,#fff3db)]"}`}>
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h3 className={`text-lg font-semibold ${sharedModeReady ? "text-emerald-900" : "text-amber-900"}`}>
-            {sharedModeReady ? "Shared Trial Mode" : "Local Demo Mode"}
-          </h3>
-          <p className={`text-sm ${sharedModeReady ? "text-emerald-700" : "text-amber-700"}`}>
-            {sharedModeReady
-              ? `Your team is working from the same hosted workspace. Sync state: ${syncState}.`
-              : "This machine is still using browser-local data. Add the shared backend keys in config.js before inviting the team."}
-          </p>
-        </div>
-        <div className={`rounded-full px-4 py-2 text-xs font-semibold ${sharedModeReady ? "bg-white text-emerald-700" : "bg-white text-amber-700"}`}>
-          {currentUser.mode === "shared" ? "Shared Access" : "Local Only"}
-        </div>
+    <div className={`flex items-center justify-between rounded-xl border px-4 py-2.5 text-sm ${sharedModeReady ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+      <div className="flex items-center gap-2.5">
+        <span className={`h-2 w-2 flex-shrink-0 rounded-full ${sharedModeReady ? "bg-emerald-500" : "bg-amber-500"}`} />
+        <span className={`font-semibold ${sharedModeReady ? "text-emerald-800" : "text-amber-800"}`}>
+          {sharedModeReady ? "Shared Trial Mode" : "Local Demo Mode"}
+        </span>
+        <span className={`hidden sm:inline ${sharedModeReady ? "text-emerald-700" : "text-amber-700"}`}>
+          {sharedModeReady ? `· Sync: ${syncState}` : "· Browser-local data only"}
+        </span>
       </div>
+      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${sharedModeReady ? "bg-white text-emerald-700" : "bg-white text-amber-700"}`}>
+        {currentUser.mode === "shared" ? "Shared Access" : "Local Only"}
+      </span>
     </div>
   );
 }
 
 function ClientViewBanner({ currentUser }) {
   return (
-    <div className="rounded-[1.8rem] border border-[#d8c8f0] bg-[linear-gradient(135deg,#faf7fe,#efe8fb)] p-5 shadow-[0_14px_34px_rgba(28,28,63,0.07)]">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-[#1C1C3F]">Client View</h3>
-          <p className="text-sm text-[#5b4c78]">
-            {currentUser.role === "client"
-              ? `Read-only access for ${currentUser.clientName}. Backend tools are hidden.`
-              : "This view is read-only and designed for safe client sharing. Backend editing tools are hidden."}
-          </p>
-        </div>
-        <div className="rounded-full border border-[#E4D8F5] bg-white px-4 py-2 text-xs font-semibold text-[#8A64B4]">
-          Share-Friendly Mode
-        </div>
+    <div className="flex items-center justify-between rounded-xl border border-[#d8c8f0] bg-[#faf7fe] px-4 py-2.5 text-sm">
+      <div className="flex items-center gap-2.5">
+        <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#8A64B4]" />
+        <span className="font-semibold text-[#1C1C3F]">Client View</span>
+        <span className="hidden text-[#5b4c78] sm:inline">
+          {currentUser.role === "client"
+            ? `· Read-only for ${currentUser.clientName}`
+            : "· Backend editing tools are hidden"}
+        </span>
       </div>
+      <span className="rounded-full border border-[#E4D8F5] bg-white px-3 py-1 text-xs font-semibold text-[#8A64B4]">
+        Share-Friendly
+      </span>
     </div>
   );
 }
@@ -1490,31 +1454,13 @@ function AccessSummary({ currentUser, selectedClientName }) {
     ? parseClientScopeList(currentUser.clientName).join(", ")
     : selectedClientName;
   return (
-    <div className="rounded-[2rem] border border-white/70 bg-white/92 p-5 shadow-[0_18px_44px_rgba(28,28,63,0.08)] backdrop-blur">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <div className="rounded-2xl border border-[#E4D8F5] bg-[#faf7fe] p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Role</div>
-          <div className="mt-2 text-lg font-semibold text-slate-900">{currentUser.role.toUpperCase()}</div>
-        </div>
-        <div className="rounded-2xl border border-[#E4D8F5] bg-[#faf7fe] p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Access Scope</div>
-          <div className="mt-2 text-lg font-semibold text-slate-900">
-            {clientScopeLabel || "All Clients"}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-[#F4B400]/15 bg-[#fffaf0] p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Permissions</div>
-          <div className="mt-2 text-lg font-semibold text-slate-900">
-            {canEdit(currentUser) ? "Edit + Report" : "Read Only"}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-[#E4D8F5] bg-[#faf7fe] p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Workspace</div>
-          <div className="mt-2 text-lg font-semibold text-slate-900">
-            {currentUser.mode === "shared" ? "Hosted Shared Data" : "Browser Local Data"}
-          </div>
-        </div>
-      </div>
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#E4D8F5] bg-white px-4 py-2.5 shadow-sm">
+      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Access</span>
+      <span className="text-slate-200">|</span>
+      <span className="rounded-full border border-[#E4D8F5] bg-[#faf7fe] px-3 py-1 text-xs font-semibold text-slate-700">{currentUser.role.toUpperCase()}</span>
+      <span className="rounded-full border border-[#E4D8F5] bg-[#faf7fe] px-3 py-1 text-xs font-semibold text-slate-700">{clientScopeLabel || "All Clients"}</span>
+      <span className="rounded-full border border-[#F4B400]/25 bg-[#fffaf0] px-3 py-1 text-xs font-semibold text-slate-700">{canEdit(currentUser) ? "Edit + Report" : "Read Only"}</span>
+      <span className="rounded-full border border-[#E4D8F5] bg-[#faf7fe] px-3 py-1 text-xs font-semibold text-slate-700">{currentUser.mode === "shared" ? "Hosted Shared" : "Browser Local"}</span>
     </div>
   );
 }
@@ -4716,8 +4662,8 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-10">
-      <div className="mx-auto max-w-7xl space-y-8">
+    <div className="min-h-screen p-4 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-3">
         <DashboardHeader
           currentUser={currentUser}
           selectedClientName={selectedClientName}
@@ -4735,10 +4681,29 @@ export default function ClientSocialMediaPostingTrackerInterface() {
         />
         <AppNotice message={notice} />
         {!isClientView && <ModeBanner currentUser={currentUser} sharedModeReady={sharedModeReady} syncState={syncState} />}
-        {!sharedModeReady && <SharedSetupPanel />}
         {isClientView && <ClientViewBanner currentUser={currentUser} />}
         {!isClientView && <AccessSummary currentUser={currentUser} selectedClientName={selectedClientName} />}
-        {canEdit(currentUser) && currentUser?.role !== "client" && (
+        {!isClientView && canEdit(currentUser) && (
+          <div className="flex items-center justify-between gap-3">
+            <WorkspaceSectionNav activeSection={adminWorkspace} onSelect={setAdminWorkspace} />
+            {currentUser?.role !== "client" && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !isClientView;
+                  setIsClientView(next);
+                  if (!next) setSelectedCalendarPost(null);
+                  setSelectedCalendarOverflow(null);
+                  setNotice(next ? "Client view enabled." : "Admin view enabled.");
+                }}
+                className="flex-shrink-0 rounded-xl border border-[#D8CCE9] bg-white px-3 py-2 text-sm font-semibold text-[#1C1C3F] hover:bg-slate-50"
+              >
+                {isClientView ? "Admin View" : "Client View"}
+              </button>
+            )}
+          </div>
+        )}
+        {isClientView && canEdit(currentUser) && currentUser?.role !== "client" && (
           <div className="flex justify-end">
             <button
               type="button"
@@ -4749,26 +4714,15 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                 setSelectedCalendarOverflow(null);
                 setNotice(next ? "Client view enabled." : "Admin view enabled.");
               }}
-              className="rounded-2xl border border-[#D8CCE9] bg-white px-4 py-2 text-sm font-semibold text-[#1C1C3F] shadow-sm"
+              className="rounded-xl border border-[#D8CCE9] bg-white px-3 py-2 text-sm font-semibold text-[#1C1C3F] hover:bg-slate-50"
             >
-              {isClientView ? "Switch to Admin View" : "Switch to Client View"}
+              Admin View
             </button>
           </div>
         )}
-        {!isClientView && canEdit(currentUser) && (
-          <WorkspaceSectionNav activeSection={adminWorkspace} onSelect={setAdminWorkspace} />
-        )}
+        {!sharedModeReady && <SharedSetupPanel />}
 
-        <div className="space-y-8">
-          {!isClientView && canEdit(currentUser) && adminWorkspace === "planning" && (
-            <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Planned Content Entry</div><p className="mt-1 text-sm text-slate-600">Create the content schedule your team will execute against.</p></div>
-                <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Planning Workspace</div><p className="mt-1 text-sm text-slate-600">Keep campaign structure, dates, platforms, and planned notes organized before updates begin.</p></div>
-              </div>
-            </div>
-          )}
-
+        <div className="space-y-6">
           {!isClientView && canEdit(currentUser) && adminWorkspace === "planning" && (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
               <PlannedEntryForm
