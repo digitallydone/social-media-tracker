@@ -673,6 +673,34 @@ function buildMergedPlanRows(plans, statusRecords, statusDrafts) {
   });
 }
 
+function createStatusDraftSnapshot(row) {
+  const snapshot = {
+    status: resolveStatusValue(row?.draftStatus, row?.currentStatus),
+    postLink: row?.draftPostLink ?? row?.currentPostLink ?? "",
+    notes: row?.draftNotes ?? row?.detailNotes ?? "",
+    qualitativeNotes: row?.draftQualitativeNotes ?? row?.qualitativeNotes ?? "",
+  };
+
+  PERFORMANCE_METRIC_FIELDS.forEach((field) => {
+    const draftMetricKey = getDraftMetricKey(field);
+    snapshot[field] = row?.[draftMetricKey] ?? row?.[field] ?? "";
+  });
+
+  return snapshot;
+}
+
+function hasProtectedDraftValue(row, field) {
+  if (field === "postLink") {
+    return Boolean((row?.draftPostLink ?? row?.currentPostLink ?? "").trim());
+  }
+
+  if (PERFORMANCE_METRIC_FIELDS.includes(field)) {
+    return parseMetricValue(row?.[getDraftMetricKey(field)] ?? row?.[field]) !== null;
+  }
+
+  return false;
+}
+
 function getMonthGridStart(date) {
   const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
   const day = firstDay.getDay();
@@ -889,30 +917,30 @@ function LoginScreen({
   authLoading,
 }) {
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="mx-auto max-w-4xl space-y-5">
-        <div className="relative overflow-hidden rounded-2xl border border-[#E4D8F5] bg-white px-6 py-5 shadow-sm">
-          <div className="absolute inset-x-0 top-0 h-[3px] bg-[linear-gradient(90deg,#1C1C3F_0%,#8A64B4_52%,#F4B400_100%)]" />
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-[#1C1C3F] text-lg font-bold text-white shadow-[0_8px_20px_rgba(28,28,63,0.22)]">
-              SF
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="text-xl font-bold text-[#1C1C3F]">{PLATFORM_NAME}</div>
-                <span className="rounded-full border border-[#8A64B4]/20 bg-[#faf7fe] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8A64B4]">
-                  {sharedMode ? "Shared Trial" : "Demo"}
-                </span>
-              </div>
-              <div className="mt-0.5 text-sm font-medium text-[#51617f]">{PLATFORM_DESCRIPTOR}</div>
-            </div>
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 md:p-8">
+      <div className="w-full max-w-4xl space-y-6">
+        {/* Brand header */}
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#13122e] shadow-[0_8px_32px_rgba(19,18,46,0.28),0_0_0_1px_rgba(120,85,200,0.2)] mb-1">
+            <span className="text-xl font-bold text-white tracking-tight">SF</span>
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-[#13122e]">{PLATFORM_NAME}</h1>
+            <p className="mt-1.5 text-sm text-slate-500 max-w-sm mx-auto">{PLATFORM_DESCRIPTOR}</p>
+          </div>
+          <div className="flex items-center justify-center gap-2">
+            <span className="text-xs text-slate-400">by</span>
+            <span className="text-xs font-semibold text-[#7855c8] tracking-wide">Digitally Done</span>
+            <span className="rounded-full bg-[#f0ebfd] border border-[#e2d5f8] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7855c8]">
+              {sharedMode ? "Shared Trial" : "Demo"}
+            </span>
           </div>
         </div>
 
         {sharedMode ? (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(280px,1fr)]">
-            <div className="rounded-2xl border border-[#E4D8F5] bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">Team Sign In</h2>
+            <div className="rounded-2xl border border-[#e2d5f8] bg-white p-7 shadow-[0_2px_4px_rgba(19,18,46,0.05),0_12px_36px_rgba(19,18,46,0.07)]">
+              <h2 className="text-lg font-semibold text-[#13122e]">Team Sign In</h2>
               <p className="mt-1.5 text-sm text-slate-500">
                 Enter an invited team email to receive a magic link for the shared workspace.
               </p>
@@ -921,14 +949,14 @@ function LoginScreen({
                   event.preventDefault();
                   onRequestMagicLink();
                 }}
-                className="mt-4 space-y-3"
+                className="mt-5 space-y-4"
               >
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Work Email</label>
+                  <label className="mb-1.5 block text-sm font-semibold text-[#13122e]">Work Email</label>
                   <input
                     value={authEmail}
                     onChange={(event) => onAuthEmailChange(event.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#8A64B4]"
+                    className="w-full rounded-xl border border-[#ddd4f5] bg-[#faf8ff] px-4 py-3 text-sm text-[#13122e] placeholder:text-slate-400 outline-none focus:border-[#7855c8] focus:shadow-[0_0_0_3px_rgba(120,85,200,0.12)]"
                     placeholder="name@yourcompany.com"
                     type="email"
                   />
@@ -936,25 +964,32 @@ function LoginScreen({
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="rounded-xl bg-[#1C1C3F] px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  className="w-full rounded-xl bg-[#13122e] px-5 py-3 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(19,18,46,0.2)] hover:bg-[#1e1c40] disabled:cursor-not-allowed disabled:opacity-60 transition-all"
                 >
                   {authLoading ? "Sending Link..." : "Send Magic Link"}
                 </button>
               </form>
               {authNotice && (
-                <div className="mt-3 rounded-xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-2.5 text-sm text-slate-600">
+                <div className="mt-4 rounded-xl border border-[#e2d5f8] bg-[#f8f5ff] px-4 py-3 text-sm text-slate-600">
                   {authNotice}
                 </div>
               )}
             </div>
 
-            <div className="rounded-2xl border border-[#E4D8F5] bg-white p-6 shadow-sm">
-              <h3 className="text-base font-semibold text-slate-900">Shared Trial Checklist</h3>
-              <div className="mt-3 space-y-2 text-sm text-slate-600">
-                <div className="rounded-xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-2.5">1. Add invited team emails with role and client scope.</div>
-                <div className="rounded-xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-2.5">2. Team members enter their email and receive a magic link.</div>
-                <div className="rounded-xl border border-[#F4B400]/20 bg-[#FFF8E6] px-4 py-2.5">3. Send the hosted URL to the pilot team.</div>
-                <div className="rounded-xl border border-[#E4D8F5] bg-[#FAF7FE] px-4 py-2.5">4. Monitor activity using the shared logs and timestamps.</div>
+            <div className="rounded-2xl border border-[#e2d5f8] bg-white p-7 shadow-[0_2px_4px_rgba(19,18,46,0.05),0_12px_36px_rgba(19,18,46,0.07)]">
+              <h3 className="text-base font-semibold text-[#13122e]">Shared Trial Checklist</h3>
+              <div className="mt-4 space-y-2 text-sm">
+                {[
+                  { text: "1. Add invited team emails with role and client scope.", accent: false },
+                  { text: "2. Team members enter their email and receive a magic link.", accent: false },
+                  { text: "3. Send the hosted URL to the pilot team.", accent: true },
+                  { text: "4. Monitor activity using the shared logs and timestamps.", accent: false },
+                ].map((item, i) => (
+                  <div key={i} className={`flex items-start gap-3 rounded-xl px-4 py-3 ${item.accent ? "border border-[#f0a800]/20 bg-[#fffbee] text-[#7a5500]" : "border border-[#ede8fa] bg-[#f8f5ff] text-slate-600"}`}>
+                    <span className={`mt-0.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${item.accent ? "bg-[#f0a800]" : "bg-[#7855c8]"}`} />
+                    {item.text}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -965,27 +1000,27 @@ function LoginScreen({
                 key={user.id}
                 type="button"
                 onClick={() => onLogin(user)}
-                className="rounded-2xl border border-[#E4D8F5] bg-white p-5 text-left shadow-sm transition hover:border-[#8A64B4]/40 hover:shadow-md"
+                className="group rounded-2xl border border-[#e2d5f8] bg-white p-6 text-left shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)] transition-all hover:border-[#7855c8]/40 hover:shadow-[0_4px_16px_rgba(120,85,200,0.12),0_0_0_1px_rgba(120,85,200,0.12)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#1C1C3F] text-sm font-bold text-white">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#13122e] text-sm font-bold text-white shadow-[0_4px_12px_rgba(19,18,46,0.2)]">
                       {user.name.charAt(0)}
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">{user.name}</div>
-                      <div className="text-xs text-[#8A64B4] font-semibold uppercase tracking-wide">{user.role}</div>
+                      <div className="font-semibold text-[#13122e]">{user.name}</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7855c8]">{user.role}</div>
                     </div>
                   </div>
-                  <span className="rounded-full border border-[#E4D8F5] bg-[#faf7fe] px-2.5 py-1 text-[10px] font-semibold text-[#8A64B4]">
-                    Sign In
+                  <span className="rounded-full border border-[#e2d5f8] bg-[#f3eefb] px-2.5 py-1 text-[10px] font-semibold text-[#7855c8] group-hover:border-[#7855c8]/30 group-hover:bg-[#ede8fb]">
+                    Enter →
                   </span>
                 </div>
-                <p className="mt-3 text-sm text-slate-500">
+                <p className="mt-3.5 text-sm leading-relaxed text-slate-500">
                   {user.role === "client"
-                    ? `View only for ${user.clientName}`
+                    ? `View only for ${user.clientName || "assigned clients"}`
                     : user.role === "manager"
-                      ? "Manage and report across clients"
+                      ? "Manage and report across all clients"
                       : "Full access including setup and backend controls"}
                 </p>
               </button>
@@ -1000,16 +1035,16 @@ function LoginScreen({
 function DashboardHeader({ currentUser, selectedClientName, onSelectClient, clientOptions, onLogout }) {
   const allClientsLabel = currentUser.role === "client" ? "All My Brands" : "All Clients";
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-[#E4D8F5] bg-white px-5 py-3 shadow-sm">
-      <div className="absolute inset-x-0 top-0 h-[3px] bg-[linear-gradient(90deg,#1C1C3F_0%,#8A64B4_58%,#F4B400_100%)]" />
+    <div className="relative overflow-hidden rounded-2xl border border-[#ddd4f5] bg-white px-5 py-3 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
+      <div className="absolute inset-x-0 top-0 h-[2px] bg-[linear-gradient(90deg,#13122e_0%,#7855c8_55%,#f0a800_100%)]" />
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#1C1C3F] text-sm font-bold text-white">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[#13122e] text-xs font-bold text-white shadow-[0_2px_8px_rgba(19,18,46,0.2)]">
             SF
           </div>
           <div>
-            <div className="text-base font-bold leading-tight text-[#1C1C3F]">{PLATFORM_NAME}</div>
-            <div className="text-[11px] font-medium text-[#8A64B4]">by Digitally Done</div>
+            <div className="text-sm font-bold leading-tight text-[#13122e]">{PLATFORM_NAME}</div>
+            <div className="text-[10px] font-semibold tracking-wide text-[#7855c8]">by Digitally Done</div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1017,7 +1052,7 @@ function DashboardHeader({ currentUser, selectedClientName, onSelectClient, clie
             <select
               value={selectedClientName}
               onChange={(e) => onSelectClient(e.target.value)}
-              className="rounded-xl border border-[#D8CCE9] bg-[#faf7fe] px-3 py-1.5 text-sm font-semibold text-[#1C1C3F] outline-none focus:border-[#8A64B4]"
+              className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-3 py-1.5 text-xs font-semibold text-[#13122e] outline-none"
             >
               <option value="All Clients">{allClientsLabel}</option>
               {clientOptions.map((client) => (
@@ -1025,14 +1060,14 @@ function DashboardHeader({ currentUser, selectedClientName, onSelectClient, clie
               ))}
             </select>
           )}
-          <div className="flex items-center gap-2 rounded-xl border border-[#E4D8F5] bg-[#faf7fe] px-3 py-1.5">
-            <span className="text-sm font-semibold text-[#1C1C3F]">{currentUser.name}</span>
-            <span className="rounded-full bg-[#1C1C3F] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">{currentUser.role}</span>
+          <div className="flex items-center gap-1.5 rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-3 py-1.5">
+            <span className="text-xs font-semibold text-[#13122e]">{currentUser.name}</span>
+            <span className="rounded bg-[#13122e] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">{currentUser.role}</span>
           </div>
           <button
             type="button"
             onClick={onLogout}
-            className="rounded-xl border border-[#D8CCE9] bg-white px-3 py-1.5 text-sm font-semibold text-[#1C1C3F] hover:bg-slate-50"
+            className="rounded-lg border border-[#ddd4f5] bg-white px-3 py-1.5 text-xs font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors"
           >
             Log Out
           </button>
@@ -1045,16 +1080,16 @@ function DashboardHeader({ currentUser, selectedClientName, onSelectClient, clie
 function AppNotice({ message }) {
   if (!message || message === "Ready for deployment.") return null;
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-[#E4D8F5] bg-[#faf7fe] px-4 py-2 text-sm text-slate-600">
-      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#8A64B4]" />
-      <span>{message}</span>
+    <div className="flex items-center gap-2 rounded-xl border border-[#ddd4f5] bg-[#f8f5ff] px-4 py-2.5 text-sm text-[#5b4a88]">
+      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#7855c8]" />
+      <span className="font-medium">{message}</span>
     </div>
   );
 }
 
 function WorkspaceSectionNav({ activeSection, onSelect }) {
   return (
-    <div className="flex items-center gap-1 rounded-2xl border border-[#E4D8F5] bg-white p-1.5 shadow-sm">
+    <div className="flex items-center gap-1 rounded-xl border border-[#ddd4f5] bg-white p-1 shadow-[0_1px_3px_rgba(19,18,46,0.04),0_4px_12px_rgba(19,18,46,0.05)]">
       {ADMIN_WORKSPACE_SECTIONS.map((section) => {
         const active = section.id === activeSection;
         return (
@@ -1063,10 +1098,10 @@ function WorkspaceSectionNav({ activeSection, onSelect }) {
             type="button"
             onClick={() => onSelect(section.id)}
             title={section.description}
-            className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
               active
-                ? "bg-[#1C1C3F] text-white shadow-sm"
-                : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                ? "bg-[#13122e] text-white shadow-[0_2px_8px_rgba(19,18,46,0.25)]"
+                : "text-slate-500 hover:bg-[#f3eefb] hover:text-[#7855c8]"
             }`}
           >
             {section.label}
@@ -1079,17 +1114,28 @@ function WorkspaceSectionNav({ activeSection, onSelect }) {
 
 function ModeBanner({ currentUser, sharedModeReady, syncState }) {
   return (
-    <div className={`flex items-center justify-between rounded-xl border px-4 py-2.5 text-sm ${sharedModeReady ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-      <div className="flex items-center gap-2.5">
-        <span className={`h-2 w-2 flex-shrink-0 rounded-full ${sharedModeReady ? "bg-emerald-500" : "bg-amber-500"}`} />
+    <div className={`flex items-center justify-between rounded-xl border px-4 py-2.5 text-sm ${
+      sharedModeReady
+        ? "border-emerald-200/80 bg-[linear-gradient(135deg,#f0fdf4,#ecfdf5)]"
+        : "border-amber-200/80 bg-[linear-gradient(135deg,#fffbeb,#fef9ee)]"
+    }`}>
+      <div className="flex items-center gap-2">
+        <span className={`relative flex h-2 w-2 flex-shrink-0`}>
+          <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-50 ${sharedModeReady ? "bg-emerald-400" : "bg-amber-400"}`} />
+          <span className={`relative inline-flex h-2 w-2 rounded-full ${sharedModeReady ? "bg-emerald-500" : "bg-amber-500"}`} />
+        </span>
         <span className={`font-semibold ${sharedModeReady ? "text-emerald-800" : "text-amber-800"}`}>
           {sharedModeReady ? "Shared Trial Mode" : "Local Demo Mode"}
         </span>
-        <span className={`hidden sm:inline ${sharedModeReady ? "text-emerald-700" : "text-amber-700"}`}>
+        <span className={`hidden sm:inline text-xs ${sharedModeReady ? "text-emerald-600" : "text-amber-600"}`}>
           {sharedModeReady ? `· Sync: ${syncState}` : "· Browser-local data only"}
         </span>
       </div>
-      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${sharedModeReady ? "bg-white text-emerald-700" : "bg-white text-amber-700"}`}>
+      <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+        sharedModeReady
+          ? "border-emerald-200 bg-white text-emerald-700"
+          : "border-amber-200 bg-white text-amber-700"
+      }`}>
         {currentUser.mode === "shared" ? "Shared Access" : "Local Only"}
       </span>
     </div>
@@ -1098,17 +1144,17 @@ function ModeBanner({ currentUser, sharedModeReady, syncState }) {
 
 function ClientViewBanner({ currentUser }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-[#d8c8f0] bg-[#faf7fe] px-4 py-2.5 text-sm">
-      <div className="flex items-center gap-2.5">
-        <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#8A64B4]" />
-        <span className="font-semibold text-[#1C1C3F]">Client View</span>
-        <span className="hidden text-[#5b4c78] sm:inline">
+    <div className="flex items-center justify-between rounded-xl border border-[#ddd4f5] bg-[linear-gradient(135deg,#f3eefb,#ede8fa)] px-4 py-2.5 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#7855c8]" />
+        <span className="font-semibold text-[#13122e]">Client View</span>
+        <span className="hidden text-[#6b5b9e] sm:inline text-xs">
           {currentUser.role === "client"
             ? `· Read-only for ${currentUser.clientName}`
             : "· Backend editing tools are hidden"}
         </span>
       </div>
-      <span className="rounded-full border border-[#E4D8F5] bg-white px-3 py-1 text-xs font-semibold text-[#8A64B4]">
+      <span className="rounded-full border border-[#ddd4f5] bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[#7855c8]">
         Share-Friendly
       </span>
     </div>
@@ -1117,16 +1163,16 @@ function ClientViewBanner({ currentUser }) {
 
 function SharedSetupPanel() {
   return (
-    <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-slate-900">Remote Team Setup Needed</h3>
-          <p className="mt-2 max-w-3xl text-sm text-slate-600">
+          <h3 className="text-base font-bold text-[#13122e]">Remote Team Setup Needed</h3>
+          <p className="mt-1.5 max-w-3xl text-sm text-slate-500">
             This app is ready for shared hosting, but it is still running without backend credentials. Complete the Supabase setup in `README-REMOTE-TRIAL.md`, then copy `config.example.js` to `config.js` and fill in your project keys.
           </p>
         </div>
-        <div className="rounded-2xl bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
-          Next file: `README-REMOTE-TRIAL.md`
+        <div className="flex-shrink-0 rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-xs font-semibold text-[#7855c8]">
+          Next: README-REMOTE-TRIAL.md
         </div>
       </div>
     </div>
@@ -1153,15 +1199,15 @@ function AccessManagementPanel({
   }
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-slate-900">Shared Access Manager</h3>
+          <h3 className="text-xl font-bold text-[#13122e]">Shared Access Manager</h3>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
             Add the teammates and client contacts who should be allowed into the hosted tracker. Once an email is invited here, that person can use the magic-link sign-in flow without any Supabase access.
           </p>
         </div>
-        <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
+        <div className="rounded-xl bg-[#f0ebfd] px-4 py-3 text-sm font-semibold text-slate-700">
           {accessInvites.length} Invited
         </div>
       </div>
@@ -1169,7 +1215,7 @@ function AccessManagementPanel({
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(320px,1fr)_minmax(0,1.4fr)]">
         <form
           onSubmit={onInviteSubmit}
-          className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-5"
+          className="space-y-4 rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-5"
         >
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">Email</label>
@@ -1177,7 +1223,7 @@ function AccessManagementPanel({
               type="email"
               value={inviteForm.email}
               onChange={(event) => onInviteFormChange("email", event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+              className="w-full rounded-xl border border-[#ddd4f5] bg-white px-4 py-3 outline-none focus:border-slate-400"
               placeholder="teammate@company.com"
             />
           </div>
@@ -1187,7 +1233,7 @@ function AccessManagementPanel({
             <input
               value={inviteForm.fullName}
               onChange={(event) => onInviteFormChange("fullName", event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+              className="w-full rounded-xl border border-[#ddd4f5] bg-white px-4 py-3 outline-none focus:border-slate-400"
               placeholder="Team member name"
             />
           </div>
@@ -1198,7 +1244,7 @@ function AccessManagementPanel({
               <select
                 value={inviteForm.role}
                 onChange={(event) => onInviteFormChange("role", event.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+                className="w-full rounded-xl border border-[#ddd4f5] bg-white px-4 py-3 outline-none focus:border-slate-400"
               >
                 {ACCESS_ROLE_OPTIONS.map((role) => (
                   <option key={role} value={role}>
@@ -1210,7 +1256,7 @@ function AccessManagementPanel({
 
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">Client Scope</label>
-              <div className={`rounded-2xl border border-slate-200 bg-white p-3 ${inviteForm.role !== "client" ? "cursor-not-allowed bg-slate-100" : ""}`}>
+              <div className={`rounded-xl border border-[#ddd4f5] bg-white p-3 ${inviteForm.role !== "client" ? "cursor-not-allowed bg-slate-100" : ""}`}>
                 {inviteForm.role === "client" ? (
                   clientOptions.length > 0 ? (
                     <>
@@ -1224,7 +1270,7 @@ function AccessManagementPanel({
                               onClick={() => toggleClientScope(client)}
                               className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
                                 selected
-                                  ? "bg-slate-900 text-white"
+                                  ? "bg-[#13122e] text-white"
                                   : "border border-slate-200 bg-white text-slate-700"
                               }`}
                             >
@@ -1260,12 +1306,12 @@ function AccessManagementPanel({
 
         <div className="space-y-4">
           {accessInvites.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+            <div className="rounded-3xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-8 text-center text-sm text-slate-500">
               No invited users yet. Add your pilot team here, then they can sign in with magic links from the hosted app.
             </div>
           ) : (
             accessInvites.map((invite) => (
-              <div key={invite.email} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+              <div key={invite.email} className="rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-2">
                     <div>
@@ -1273,10 +1319,10 @@ function AccessManagementPanel({
                       <div className="text-sm text-slate-500">{invite.email}</div>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                      <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[#13122e]">
                         {invite.role.toUpperCase()}
                       </span>
-                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                      <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[#13122e]">
                         {invite.clientName || "All Clients"}
                       </span>
                     </div>
@@ -1289,7 +1335,7 @@ function AccessManagementPanel({
                       type="button"
                       disabled={inviteBusy}
                       onClick={() => onInviteEdit(invite)}
-                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Edit
                     </button>
@@ -1297,7 +1343,7 @@ function AccessManagementPanel({
                       type="button"
                       disabled={inviteBusy}
                       onClick={() => onInviteDelete(invite.email)}
-                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Remove
                     </button>
@@ -1321,78 +1367,55 @@ function ClientDirectoryPanel({
   clients,
   busy,
 }) {
+  const inputCls = "w-full rounded-xl border border-[#ddd4f5] bg-[#faf8ff] px-4 py-2.5 text-sm text-[#13122e] placeholder:text-slate-400 outline-none focus:border-[#7855c8] focus:shadow-[0_0_0_3px_rgba(120,85,200,0.1)] transition-all";
+
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
+      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-slate-900">Client Directory</h3>
+          <h3 className="text-xl font-bold text-[#13122e]">Client Directory</h3>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
             Add client brands here first so planners, invites, and reporting all use the same clean client list.
           </p>
         </div>
-        <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
-          {clients.length} Clients
+        <div className="flex-shrink-0 rounded-xl border border-[#ddd4f5] bg-[#f3eefb] px-4 py-2.5 text-sm font-bold text-[#7855c8]">
+          {clients.length} {clients.length === 1 ? "Client" : "Clients"}
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(320px,1fr)_minmax(0,1.4fr)]">
-        <form onSubmit={onClientSubmit} className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <form onSubmit={onClientSubmit} className="space-y-4 rounded-xl border border-[#ddd4f5] bg-[#f8f5ff] p-5">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Client Brand Name</label>
-            <input
-              value={clientForm.name}
-              onChange={(event) => onClientFormChange("name", event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
-              placeholder="e.g. CarvinClay"
-            />
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Client Brand Name</label>
+            <input value={clientForm.name} onChange={(event) => onClientFormChange("name", event.target.value)} className={inputCls} placeholder="e.g. CarvinClay" />
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Notes</label>
-            <textarea
-              value={clientForm.notes}
-              onChange={(event) => onClientFormChange("notes", event.target.value)}
-              rows={4}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
-              placeholder="Optional notes about this client or brand"
-            />
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Notes</label>
+            <textarea value={clientForm.notes} onChange={(event) => onClientFormChange("notes", event.target.value)} rows={4} className={inputCls} placeholder="Optional notes about this client or brand" />
           </div>
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
+          <button type="submit" disabled={busy} className="w-full rounded-xl bg-[#13122e] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_4px_12px_rgba(19,18,46,0.2)] hover:bg-[#1e1c40] transition-all disabled:cursor-not-allowed disabled:opacity-60">
             {busy ? "Saving Client..." : "Save Client"}
           </button>
         </form>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {clients.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+            <div className="rounded-xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-8 text-center text-sm text-slate-400">
               No client brands have been added yet.
             </div>
           ) : (
             clients.map((client) => (
-              <div key={client.id || client.name} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div key={client.id || client.name} className="rounded-xl border border-[#e8e3f5] bg-white p-4 shadow-[0_1px_4px_rgba(19,18,46,0.04)] hover:shadow-[0_2px_8px_rgba(19,18,46,0.07)] transition-shadow">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <div className="text-lg font-semibold text-slate-900">{client.name}</div>
-                    <div className="mt-2 text-sm text-slate-500">{client.notes || "No notes added yet."}</div>
+                    <div className="font-semibold text-[#13122e]">{client.name}</div>
+                    <div className="mt-1 text-sm text-slate-500">{client.notes || "No notes added yet."}</div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onClientEdit(client)}
-                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
+                  <div className="flex flex-shrink-0 gap-2">
+                    <button type="button" disabled={busy} onClick={() => onClientEdit(client)} className="rounded-lg border border-[#ddd4f5] bg-white px-3 py-1.5 text-xs font-semibold text-[#13122e] hover:bg-[#f8f5ff] disabled:opacity-60 transition-colors">
                       Edit
                     </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onClientDelete(client)}
-                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
+                    <button type="button" disabled={busy} onClick={() => onClientDelete(client)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 disabled:opacity-60 transition-colors">
                       Remove
                     </button>
                   </div>
@@ -1408,38 +1431,33 @@ function ClientDirectoryPanel({
 
 function DeploymentTools({ onExport, onImport, onResetData, hasData, isClientView, onToggleClientView, sharedModeReady }) {
   return (
-    <div className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_18px_44px_rgba(28,28,63,0.08)] backdrop-blur">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-5 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-slate-900">
+          <h3 className="text-base font-bold text-[#13122e]">
             {sharedModeReady ? "Trial Operations" : "Deployment Tools"}
           </h3>
-          <p className="text-sm text-slate-500">
+          <p className="mt-0.5 text-sm text-slate-500">
             {sharedModeReady
               ? "Export shared records for review, switch between admin and client views, and keep the trial safe."
               : "Export a backup, restore a backup, switch between admin and client mode, or reset the app before going live."}
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={onToggleClientView} className="rounded-2xl border border-[#D8CCE9] bg-white px-4 py-2 text-sm font-semibold text-[#1C1C3F]">
-            {isClientView ? "Switch to Admin View" : "Switch to Client View"}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={onToggleClientView} className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-3.5 py-2 text-xs font-semibold text-[#13122e] hover:bg-[#f0ebfd] transition-colors">
+            {isClientView ? "Admin View" : "Client View"}
           </button>
-          <button type="button" onClick={onExport} className="rounded-2xl bg-[#1C1C3F] px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(28,28,63,0.18)]">
+          <button type="button" onClick={onExport} className="rounded-lg bg-[#13122e] px-3.5 py-2 text-xs font-semibold text-white shadow-[0_2px_8px_rgba(19,18,46,0.2)] hover:bg-[#1e1c40] transition-colors">
             Export Backup
           </button>
           {!isClientView && !sharedModeReady && (
-            <label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+            <label className="cursor-pointer rounded-lg border border-[#ddd4f5] bg-white px-3.5 py-2 text-xs font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">
               Import Backup
               <input type="file" accept="application/json" className="hidden" onChange={onImport} />
             </label>
           )}
           {!isClientView && !sharedModeReady && (
-            <button
-              type="button"
-              onClick={onResetData}
-              disabled={!hasData}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
+            <button type="button" onClick={onResetData} disabled={!hasData} className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
               Reset Data
             </button>
           )}
@@ -1454,51 +1472,66 @@ function AccessSummary({ currentUser, selectedClientName }) {
     ? parseClientScopeList(currentUser.clientName).join(", ")
     : selectedClientName;
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#E4D8F5] bg-white px-4 py-2.5 shadow-sm">
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Access</span>
-      <span className="text-slate-200">|</span>
-      <span className="rounded-full border border-[#E4D8F5] bg-[#faf7fe] px-3 py-1 text-xs font-semibold text-slate-700">{currentUser.role.toUpperCase()}</span>
-      <span className="rounded-full border border-[#E4D8F5] bg-[#faf7fe] px-3 py-1 text-xs font-semibold text-slate-700">{clientScopeLabel || "All Clients"}</span>
-      <span className="rounded-full border border-[#F4B400]/25 bg-[#fffaf0] px-3 py-1 text-xs font-semibold text-slate-700">{canEdit(currentUser) ? "Edit + Report" : "Read Only"}</span>
-      <span className="rounded-full border border-[#E4D8F5] bg-[#faf7fe] px-3 py-1 text-xs font-semibold text-slate-700">{currentUser.mode === "shared" ? "Hosted Shared" : "Browser Local"}</span>
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 shadow-[0_1px_3px_rgba(19,18,46,0.04)]">
+      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Access</span>
+      <span className="text-slate-200 text-xs">|</span>
+      <span className="rounded-lg border border-[#ddd4f5] bg-[#f3eefb] px-2.5 py-1 text-[11px] font-semibold text-[#7855c8]">{currentUser.role.toUpperCase()}</span>
+      <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[11px] font-semibold text-slate-600">{clientScopeLabel || "All Clients"}</span>
+      <span className="rounded-lg border border-[#f0e8b8] bg-[#fffdf0] px-2.5 py-1 text-[11px] font-semibold text-[#8a6a00]">{canEdit(currentUser) ? "Edit + Report" : "Read Only"}</span>
+      <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[11px] font-semibold text-slate-600">{currentUser.mode === "shared" ? "Hosted Shared" : "Browser Local"}</span>
     </div>
   );
 }
 
 function StatCards({ stats }) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-7">
-      {stats.map((stat, index) => (
-        <div key={stat.label} className={`rounded-[1.8rem] border p-6 shadow-[0_16px_36px_rgba(28,28,63,0.07)] ${
-          index === stats.length - 1
-            ? "border-[#8A64B4]/25 bg-[linear-gradient(135deg,#1C1C3F,#2a2a59)] text-white"
-            : index === 0
-              ? "border-[#E4D8F5] bg-[linear-gradient(135deg,#ffffff,#f6f1fd)]"
-              : index === 1
-                ? "border-[#F4B400]/20 bg-[linear-gradient(135deg,#fffdf5,#fff7db)]"
-                : "border-white/70 bg-white/92"
-        }`}>
-          <p className={`text-sm ${index === stats.length - 1 ? "text-[#E4D8F5]" : "text-slate-500"}`}>{stat.label}</p>
-          <h2 className={`mt-2 text-3xl font-bold ${index === stats.length - 1 ? "text-white" : "text-slate-900"}`}>{stat.value}</h2>
-        </div>
-      ))}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-7">
+      {stats.map((stat, index) => {
+        const isHero = index === 0;
+        const isAccent = index === 1;
+        const isLast = index === stats.length - 1;
+        return (
+          <div
+            key={stat.label}
+            className={`relative overflow-hidden rounded-2xl border p-5 ${
+              isHero
+                ? "border-[#7855c8]/20 bg-[linear-gradient(135deg,#1e1a40_0%,#2d2060_50%,#13122e_100%)] col-span-2 sm:col-span-1 shadow-[0_8px_32px_rgba(19,18,46,0.24),0_0_0_1px_rgba(120,85,200,0.2)]"
+                : isLast
+                  ? "border-[#f0a800]/20 bg-[linear-gradient(135deg,#fff9e8,#fffbee)] shadow-[0_2px_8px_rgba(240,168,0,0.08)]"
+                  : isAccent
+                    ? "border-[#ddd4f5] bg-[linear-gradient(135deg,#f3eefb,#ede8fa)] shadow-[0_2px_8px_rgba(120,85,200,0.06)]"
+                    : "border-[#e8e3f5] bg-white shadow-[0_2px_8px_rgba(19,18,46,0.04)]"
+            }`}
+          >
+            {isHero && (
+              <div className="absolute inset-x-0 bottom-0 h-16 bg-[linear-gradient(180deg,transparent,rgba(120,85,200,0.15))]" />
+            )}
+            <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${
+              isHero ? "text-[#b8a8e8]" : isLast ? "text-[#a07800]" : isAccent ? "text-[#7855c8]" : "text-slate-400"
+            }`}>{stat.label}</p>
+            <h2 className={`mt-2.5 text-2xl font-bold leading-none ${
+              isHero ? "text-white" : isLast ? "text-[#7a5c00]" : isAccent ? "text-[#13122e]" : "text-[#13122e]"
+            }`}>{stat.value}</h2>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function MonthScopeControls({ monthDate, onChangeMonth, onPreviousMonth, onNextMonth, onGoToCurrentMonth }) {
   return (
-    <div className="rounded-[1.8rem] border border-white/70 bg-white/92 p-5 shadow-[0_16px_36px_rgba(28,28,63,0.07)] backdrop-blur">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-5 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">Reporting Month</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-900">{formatMonthLabel(monthDate)}</div>
-          <p className="mt-2 text-sm text-slate-500">
-            Planned content, execution log, stats, and reporting now follow this active month by default.
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#7855c8]">Reporting Month</div>
+          <div className="mt-1.5 text-xl font-bold text-[#13122e]">{formatMonthLabel(monthDate)}</div>
+          <p className="mt-1 text-sm text-slate-500">
+            Planned content, execution log, stats, and reporting follow this active month.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev Month</button>
+          <button type="button" onClick={onPreviousMonth} className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-3.5 py-2 text-xs font-semibold text-[#13122e] hover:bg-[#f0ebfd] transition-colors">← Prev</button>
           <input
             type="month"
             value={getMonthInputValue(monthDate)}
@@ -1506,10 +1539,10 @@ function MonthScopeControls({ monthDate, onChangeMonth, onPreviousMonth, onNextM
               const next = parseMonthInputValue(event.target.value);
               if (next) onChangeMonth(next);
             }}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+            className="rounded-lg border border-[#ddd4f5] bg-white px-3.5 py-2 text-xs font-semibold text-[#13122e]"
           />
-          <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next Month</button>
-          <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Current Month</button>
+          <button type="button" onClick={onNextMonth} className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-3.5 py-2 text-xs font-semibold text-[#13122e] hover:bg-[#f0ebfd] transition-colors">Next →</button>
+          <button type="button" onClick={onGoToCurrentMonth} className="rounded-lg bg-[#13122e] px-3.5 py-2 text-xs font-semibold text-white shadow-[0_2px_8px_rgba(19,18,46,0.2)] hover:bg-[#1e1c40] transition-colors">This Month</button>
         </div>
       </div>
     </div>
@@ -1533,10 +1566,12 @@ function PlannedEntryForm({
 }) {
   const isEditMode = mode === "edit";
 
+  const inputCls = "w-full rounded-xl border border-[#ddd4f5] bg-[#faf8ff] px-4 py-2.5 text-sm text-[#13122e] placeholder:text-slate-400 outline-none focus:border-[#7855c8] focus:shadow-[0_0_0_3px_rgba(120,85,200,0.1)] transition-all";
+
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="mb-5">
-        <h2 className="text-2xl font-semibold text-slate-900">{title || (isEditMode ? "Edit Planned Entry" : "Planned Content Entry")}</h2>
+        <h2 className="text-xl font-bold text-[#13122e]">{title || (isEditMode ? "Edit Planned Entry" : "Planned Content Entry")}</h2>
         <p className="mt-1 text-sm text-slate-500">
           {description || (isEditMode
             ? "Update the selected planned entry here, then save and return straight to the planned log."
@@ -1546,144 +1581,89 @@ function PlannedEntryForm({
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Client Name</label>
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Client Name</label>
           {clientOptions.length > 0 ? (
-            <select
-              value={planForm.clientName}
-              onChange={(e) => onPlanChange("clientName", e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
-            >
+            <select value={planForm.clientName} onChange={(e) => onPlanChange("clientName", e.target.value)} className={inputCls}>
               <option value="">Select client</option>
               {clientOptions.map((client) => (
                 <option key={client} value={client}>{client}</option>
               ))}
             </select>
           ) : (
-            <input
-              value={planForm.clientName}
-              onChange={(e) => onPlanChange("clientName", e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-              placeholder="Add clients from Client Directory first"
-            />
+            <input value={planForm.clientName} onChange={(e) => onPlanChange("clientName", e.target.value)} className={inputCls} placeholder="Add clients from Client Directory first" />
           )}
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Campaign Topic</label>
-          <input
-            value={planForm.campaign}
-            onChange={(e) => onPlanChange("campaign", e.target.value)}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-            placeholder="e.g. Workers' Day Visibility"
-          />
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Campaign Topic</label>
+          <input value={planForm.campaign} onChange={(e) => onPlanChange("campaign", e.target.value)} className={inputCls} placeholder="e.g. Workers' Day Visibility" />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Date</label>
-          <input
-            type="date"
-            value={planForm.date}
-            onChange={(e) => onPlanChange("date", e.target.value)}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-          />
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Date</label>
+          <input type="date" value={planForm.date} onChange={(e) => onPlanChange("date", e.target.value)} className={inputCls} />
         </div>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(260px,1fr)_minmax(0,1.4fr)]">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(260px,1fr)_minmax(0,1.4fr)]">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Platforms</label>
-            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 p-3">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Platforms</label>
+            <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-[#ddd4f5] bg-[#faf8ff] p-2.5">
               {PLATFORM_OPTIONS.map((platform) => {
                 const checked = planForm.platforms.includes(platform);
                 return (
                   <label
                     key={platform}
-                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${
-                      checked ? "bg-slate-100 text-slate-900" : "text-slate-600"
+                    className={`flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                      checked ? "bg-[#13122e] text-white" : "text-slate-600 hover:bg-[#f0ebfd] hover:text-[#7855c8]"
                     }`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => onTogglePlatform(platform)}
-                      className="h-4 w-4"
-                    />
-                    <span>{platform}</span>
+                    <input type="checkbox" checked={checked} onChange={() => onTogglePlatform(platform)} className="h-3.5 w-3.5 accent-[#7855c8]" />
+                    <span className="text-xs font-medium">{platform}</span>
                   </label>
                 );
               })}
             </div>
-            <p className="mt-2 text-xs text-slate-500">Each selected platform will be saved as its own planned row.</p>
+            <p className="mt-1.5 text-xs text-slate-400">Each selected platform saves as its own row.</p>
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Content Format & Time</label>
-            <div className="space-y-3 rounded-2xl border border-slate-200 p-3">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Format & Time</label>
+            <div className="space-y-2.5 rounded-xl border border-[#ddd4f5] bg-[#faf8ff] p-2.5">
               {planForm.platforms.map((platform) => (
-                <div key={platform} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                  <div className="mb-3 text-sm font-semibold text-slate-700">{platform}</div>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <select
-                      value={planForm.platformFormats[platform] || ""}
-                      onChange={(e) => onPlatformFormatChange(platform, e.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                    >
-                      <option value="">Select content format</option>
+                <div key={platform} className="rounded-xl border border-[#ede8fa] bg-white p-3">
+                  <div className="mb-2 text-xs font-bold text-[#7855c8] uppercase tracking-wide">{platform}</div>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    <select value={planForm.platformFormats[platform] || ""} onChange={(e) => onPlatformFormatChange(platform, e.target.value)} className={inputCls}>
+                      <option value="">Select format</option>
                       {CONTENT_FORMAT_OPTIONS.map((format) => (
-                        <option key={format} value={format}>
-                          {format}
-                        </option>
+                        <option key={format} value={format}>{format}</option>
                       ))}
                     </select>
-
-                    <input
-                      type="time"
-                      value={planForm.platformTimes[platform] || ""}
-                      onChange={(e) => onPlatformTimeChange(platform, e.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                    />
+                    <input type="time" value={planForm.platformTimes[platform] || ""} onChange={(e) => onPlatformTimeChange(platform, e.target.value)} className={inputCls} />
                   </div>
                 </div>
               ))}
             </div>
-            <p className="mt-2 text-xs text-slate-500">Choose a different content format and posting time for each selected platform.</p>
+            <p className="mt-1.5 text-xs text-slate-400">Set format and time per platform.</p>
           </div>
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Content Topic</label>
-          <input
-            value={planForm.topic}
-            onChange={(e) => onPlanChange("topic", e.target.value)}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-            placeholder="e.g. Product launch teaser"
-          />
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Content Topic</label>
+          <input value={planForm.topic} onChange={(e) => onPlanChange("topic", e.target.value)} className={inputCls} placeholder="e.g. Product launch teaser" />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Planning Notes</label>
-          <textarea
-            value={planForm.notes}
-            onChange={(e) => onPlanChange("notes", e.target.value)}
-            rows={4}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-            placeholder="Capture campaign notes, goals, or dependencies"
-          />
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Planning Notes</label>
+          <textarea value={planForm.notes} onChange={(e) => onPlanChange("notes", e.target.value)} rows={3} className={inputCls} placeholder="Capture campaign notes, goals, or dependencies" />
         </div>
 
-        <div className="flex gap-3">
-          <button
-            type="submit"
-            disabled={busy}
-            className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
+        <div className="flex gap-3 pt-1">
+          <button type="submit" disabled={busy} className="flex-1 rounded-xl bg-[#13122e] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(19,18,46,0.2)] hover:bg-[#1e1c40] transition-all disabled:cursor-not-allowed disabled:opacity-60">
             {busy ? "Saving..." : isEditMode || editingPlanId !== null ? "Update Planned Entry" : "Save Planned Entry"}
           </button>
           {isEditMode && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
-            >
+            <button type="button" onClick={onCancel} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">
               Cancel
             </button>
           )}
@@ -1777,24 +1757,24 @@ function PlanningLogSummary({
   }, [clientOptions, selectedClient]);
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h3 className="text-xl font-semibold text-slate-900">Planned Log</h3>
+          <h3 className="text-xl font-bold text-[#13122e]">Planned Log</h3>
           <p className="mt-1 text-sm text-slate-500">A filtered planning-side view of every item created from Planned Content Entry.</p>
         </div>
         <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{filteredRows.length} Entries</div>
       </div>
 
       {monthDate && (
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="mt-5 rounded-xl border border-[#e8e3f5] bg-[#f8f5ff] p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Planning Month</div>
               <div className="mt-2 text-lg font-semibold text-slate-900">{formatMonthLabel(monthDate)}</div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev Month</button>
+              <button type="button" onClick={onPreviousMonth} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">Prev Month</button>
               <input
                 type="month"
                 value={getMonthInputValue(monthDate)}
@@ -1802,10 +1782,10 @@ function PlanningLogSummary({
                   const next = parseMonthInputValue(event.target.value);
                   if (next) onChangeMonth?.(next);
                 }}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+                className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors"
               />
-              <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next Month</button>
-              <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Current Month</button>
+              <button type="button" onClick={onNextMonth} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">Next Month</button>
+              <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-[#13122e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1e1c40] transition-colors">Current Month</button>
             </div>
           </div>
           <div className="mt-4">
@@ -1813,7 +1793,7 @@ function PlanningLogSummary({
               type="date"
               value={selectedDate}
               onChange={(event) => setSelectedDate(event.target.value)}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+              className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors"
             />
           </div>
         </div>
@@ -1823,8 +1803,8 @@ function PlanningLogSummary({
         <button
           type="button"
           onClick={() => setSelectedClient("All Clients")}
-          className={`rounded-full px-4 py-2 text-sm font-semibold ${
-            selectedClient === "All Clients" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700"
+          className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+            selectedClient === "All Clients" ? "bg-[#13122e] text-white shadow-[0_2px_8px_rgba(19,18,46,0.18)]" : "border border-[#ddd4f5] bg-white text-[#13122e] hover:bg-[#f8f5ff]"
           }`}
         >
           All Clients
@@ -1834,8 +1814,8 @@ function PlanningLogSummary({
             key={client}
             type="button"
             onClick={() => setSelectedClient(client)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${
-              selectedClient === client ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700"
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+              selectedClient === client ? "bg-[#13122e] text-white shadow-[0_2px_8px_rgba(19,18,46,0.18)]" : "border border-[#ddd4f5] bg-white text-[#13122e] hover:bg-[#f8f5ff]"
             }`}
           >
             {client}
@@ -1847,8 +1827,8 @@ function PlanningLogSummary({
         <button
           type="button"
           onClick={() => setSelectedPlatform("All Platforms")}
-          className={`rounded-full px-4 py-2 text-sm font-semibold ${
-            selectedPlatform === "All Platforms" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700"
+          className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+            selectedPlatform === "All Platforms" ? "bg-[#13122e] text-white shadow-[0_2px_8px_rgba(19,18,46,0.18)]" : "border border-[#ddd4f5] bg-white text-[#13122e] hover:bg-[#f8f5ff]"
           }`}
         >
           All Platforms
@@ -1858,8 +1838,8 @@ function PlanningLogSummary({
             key={platform}
             type="button"
             onClick={() => setSelectedPlatform(platform)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${
-              selectedPlatform === platform ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700"
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+              selectedPlatform === platform ? "bg-[#13122e] text-white shadow-[0_2px_8px_rgba(19,18,46,0.18)]" : "border border-[#ddd4f5] bg-white text-[#13122e] hover:bg-[#f8f5ff]"
             }`}
           >
             {platform}
@@ -1869,19 +1849,19 @@ function PlanningLogSummary({
 
       <div className="mt-5 space-y-3">
         {filteredRows.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-6 text-center text-sm text-slate-500">
             No planned entries match the current month, date, client, or platform filters.
           </div>
         ) : filteredRows.map((row) => (
-          <div key={row.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div key={row.id} className="rounded-xl border border-[#ddd4f5] bg-slate-50 px-4 py-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-slate-900">{row.topic || "-"}</div>
                 <div className="mt-1 text-xs text-slate-500">{row.clientName || "-"}</div>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">{formatDateLabel(row.date)}</span>
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">{row.platform}</span>
+                <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[#13122e]">{formatDateLabel(row.date)}</span>
+                <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[#13122e]">{row.platform}</span>
                 <span className={`inline-flex rounded-full border px-3 py-1 ${getStatusStyle(row.currentStatus)}`}>{row.currentStatus}</span>
               </div>
             </div>
@@ -1898,13 +1878,13 @@ function ModalShell({ title, subtitle, onClose, children }) {
       <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white shadow-2xl">
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white/95 px-6 py-5 backdrop-blur">
           <div>
-            <h3 className="text-2xl font-semibold text-slate-900">{title}</h3>
+            <h3 className="text-2xl font-bold text-[#13122e]">{title}</h3>
             {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+            className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors"
           >
             Close
           </button>
@@ -1925,27 +1905,27 @@ function CalendarPostDetailsDialog({ post, onClose }) {
       onClose={onClose}
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-5">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Client</div>
           <div className="mt-2 text-lg font-semibold text-slate-900">{post.clientName || "-"}</div>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-5">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Platform</div>
           <div className="mt-2 text-lg font-semibold text-slate-900">{post.platform || "-"}</div>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-5">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Date</div>
           <div className="mt-2 text-lg font-semibold text-slate-900">{formatDateLabel(post.date)}</div>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-5">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Time</div>
           <div className="mt-2 text-lg font-semibold text-slate-900">{formatTimeLabel(post.time)}</div>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-5">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Format</div>
           <div className="mt-2 text-lg font-semibold text-slate-900">{post.format || "-"}</div>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-5">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Status</div>
           <div className="mt-2">
             {post.currentStatus === "-"
@@ -1955,13 +1935,13 @@ function CalendarPostDetailsDialog({ post, onClose }) {
         </div>
       </div>
 
-      <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-5">
+      <div className="mt-4 rounded-2xl border border-[#ddd4f5] bg-white p-5">
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Planning Notes</div>
         <div className="mt-3 text-sm leading-7 text-slate-700">{post.detailNotes || "No planning notes were added."}</div>
       </div>
 
       {hasPerformanceMetrics(post) && (
-        <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="mt-4 rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Performance Snapshot</div>
@@ -1980,9 +1960,9 @@ function CalendarPostDetailsDialog({ post, onClose }) {
               { label: "Shares", value: post.shares },
               { label: "Clicks", value: post.clicks },
             ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div key={item.label} className="rounded-xl border border-[#ddd4f5] bg-white p-4">
                 <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
-                <div className="mt-2 text-2xl font-semibold text-slate-900">{formatMetricValue(item.value)}</div>
+                <div className="mt-2 text-2xl font-bold text-[#13122e]">{formatMetricValue(item.value)}</div>
               </div>
             ))}
           </div>
@@ -2021,7 +2001,7 @@ function CalendarDayDetailsDialog({ dayLabel, rows, onClose, onSelectRow }) {
             key={row.id}
             type="button"
             onClick={() => onSelectRow?.(row)}
-            className="w-full rounded-3xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-white"
+            className="w-full rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-4 text-left transition hover:border-slate-300 hover:bg-white"
           >
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
@@ -2112,14 +2092,14 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onSelectR
   );
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-slate-900">Content Calendar</h3>
+          <h3 className="text-xl font-bold text-[#13122e]">Content Calendar</h3>
           <p className="text-sm text-slate-500">Switch between daily, weekly, and monthly calendar views while keeping the same month in focus.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-2xl bg-slate-100 p-1">
+          <div className="inline-flex rounded-xl bg-[#f0ebfd] p-1">
             {[
               { id: "daily", label: "Daily" },
               { id: "weekly", label: "Weekly" },
@@ -2129,27 +2109,27 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onSelectR
                 key={mode.id}
                 type="button"
                 onClick={() => setCalendarViewMode(mode.id)}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold ${calendarViewMode === mode.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
+                className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${calendarViewMode === mode.id ? "bg-white text-[#13122e] shadow-[0_1px_4px_rgba(19,18,46,0.1)]" : "text-[#7855c8] hover:bg-white/60"}`}
               >
                 {mode.label}
               </button>
             ))}
           </div>
-          <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev</button>
-          <div className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900">{monthTitle}</div>
-          <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next</button>
+          <button type="button" onClick={onPreviousMonth} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">Prev</button>
+          <div className="rounded-lg bg-[#f0ebfd] px-3.5 py-1.5 text-xs font-bold text-[#7855c8]">{monthTitle}</div>
+          <button type="button" onClick={onNextMonth} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">Next</button>
         </div>
       </div>
 
       {calendarViewMode === "daily" && (
         <div className="space-y-3">
           {mobileDays.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+            <div className="rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-8 text-center text-sm text-slate-500">
               No posts scheduled for this month yet.
             </div>
           ) : (
             mobileDays.map((day) => (
-              <div key={day.dateKey} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div key={day.dateKey} className="rounded-xl border border-[#e8e3f5] bg-[#f8f5ff] p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="text-sm font-semibold text-slate-900">{day.label}</div>
                   <div className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-slate-700">
@@ -2177,24 +2157,24 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onSelectR
       {calendarViewMode === "weekly" && (
         <div className="space-y-4">
           {weeklyGroups.every((group) => group.rows.length === 0) ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+            <div className="rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-8 text-center text-sm text-slate-500">
               No posts scheduled for this month yet.
             </div>
           ) : (
             weeklyGroups.map((group) => (
-              <div key={group.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-4 flex items-center justify-between gap-3">
+              <div key={group.id} className="rounded-xl border border-[#e8e3f5] bg-[#f8f5ff] p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-slate-900">{group.label}</div>
-                    <div className="mt-1 text-xs text-slate-500">Weekly view across the selected month</div>
+                    <div className="text-sm font-bold text-[#13122e]">{group.label}</div>
+                    <div className="mt-0.5 text-xs text-slate-500">Weekly view across the selected month</div>
                   </div>
-                  <div className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-slate-700">
+                  <div className="rounded-lg border border-[#ddd4f5] bg-white px-2.5 py-1 text-[10px] font-bold text-[#7855c8]">
                     {group.rows.length} post{group.rows.length === 1 ? "" : "s"}
                   </div>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   {group.days.map((day) => (
-                    <div key={day.dateKey} className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <div key={day.dateKey} className="rounded-xl border border-[#ddd4f5] bg-white p-3">
                       <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{day.dayLabel}</div>
                       {day.rows.length === 0 ? (
                         <div className="text-[11px] text-slate-300">No posts</div>
@@ -2231,12 +2211,12 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onSelectR
 
       <div className="mt-2 space-y-3 md:hidden">
         {mobileDays.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-8 text-center text-sm text-slate-500">
             No posts scheduled for this month yet.
           </div>
         ) : (
           mobileDays.map((day) => (
-            <div key={day.dateKey} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div key={day.dateKey} className="rounded-xl border border-[#e8e3f5] bg-[#f8f5ff] p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-slate-900">{day.label}</div>
                 <div className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-slate-700">
@@ -2281,10 +2261,10 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onSelectR
           const isCurrentMonth = day.getMonth() === monthDate.getMonth();
           const isToday = dateKey === getTodayDateKey();
           return (
-            <div key={dateKey} className={`min-h-[150px] rounded-2xl border p-3 ${isCurrentMonth ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50 text-slate-400"} ${isToday ? "ring-2 ring-slate-300" : ""}`}>
-              <div className="mb-2 flex items-center justify-between">
-                <span className={`text-sm font-semibold ${isCurrentMonth ? "text-slate-900" : "text-slate-400"}`}>{day.getDate()}</span>
-                {dayRows.length > 0 && <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700">{dayRows.length}</span>}
+            <div key={dateKey} className={`min-h-[130px] rounded-xl border p-2.5 transition-shadow ${isCurrentMonth ? "border-[#ddd4f5] bg-white hover:shadow-[0_2px_8px_rgba(19,18,46,0.06)]" : "border-[#ede8fa] bg-[#faf8ff] text-slate-400"} ${isToday ? "ring-2 ring-[#7855c8]/30 border-[#7855c8]/30" : ""}`}>
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className={`text-xs font-bold ${isToday ? "flex h-5 w-5 items-center justify-center rounded-full bg-[#7855c8] text-white text-[10px]" : isCurrentMonth ? "text-[#13122e]" : "text-slate-300"}`}>{day.getDate()}</span>
+                {dayRows.length > 0 && <span className="rounded bg-[#f0ebfd] px-1.5 py-0.5 text-[9px] font-bold text-[#7855c8]">{dayRows.length}</span>}
               </div>
               {compact ? (
                 <div className="space-y-2">
@@ -2317,27 +2297,26 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onSelectR
                   )}
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-1">
                   {dayRows.slice(0, 3).map((row) => (
                     <button
                       key={row.id}
                       type="button"
                       onClick={() => onSelectRow?.(row)}
-                      className={`w-full rounded-xl bg-slate-50 p-2 text-left ${onSelectRow ? "transition hover:bg-slate-100" : ""}`}
+                      className={`w-full rounded-lg border border-[#ede8fa] bg-[#f8f5ff] p-1.5 text-left ${onSelectRow ? "transition hover:border-[#7855c8]/30 hover:bg-[#f0ebfd]" : ""}`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-semibold text-slate-900">{row.platform}</span>
-                        {row.currentStatus !== "-" && <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getStatusStyle(row.currentStatus)}`}>{row.currentStatus}</span>}
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="truncate text-[10px] font-bold text-[#13122e]">{row.platform}</span>
+                        {row.currentStatus !== "-" && <span className={`inline-flex shrink-0 rounded border px-1 py-0.5 text-[9px] font-bold ${getStatusStyle(row.currentStatus)}`}>{row.currentStatus}</span>}
                       </div>
-                      <div className="mt-1 line-clamp-2 text-[11px] text-slate-700">{row.topic}</div>
-                      <div className="mt-1 text-[10px] text-slate-500">{formatTimeLabel(row.time)}</div>
+                      {row.topic && <div className="mt-0.5 line-clamp-1 text-[9px] text-slate-500">{row.topic}</div>}
                     </button>
                   ))}
                   {dayRows.length > 3 && (
                     <button
                       type="button"
                       onClick={() => onSelectRow?.({ __dayOverflow: true, dayLabel: getDayKey(dateKey), rows: dayRows.slice(3) })}
-                      className="text-[11px] font-semibold text-slate-500 transition hover:text-slate-700"
+                      className="text-[10px] font-semibold text-[#7855c8] transition hover:text-[#13122e]"
                     >
                       +{dayRows.length - 3} more
                     </button>
@@ -2358,7 +2337,7 @@ function ClientScopePanel({ title, description, selectedClientName, clientOption
   const scopeLabels = getSelectedScopeLabels(selectedClientName, clientOptions, allClientsLabel);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+    <div className="rounded-xl border border-[#ddd4f5] bg-white p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{title}</div>
@@ -2533,17 +2512,17 @@ function PerformanceDashboard({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
             {isClientView ? "Client Dashboard" : "Performance Dashboard"}
           </p>
-          <h3 className="mt-2 text-2xl font-semibold text-slate-900">Performance Overview</h3>
+          <h3 className="mt-2 text-2xl font-bold text-[#13122e]">Performance Overview</h3>
           <p className="mt-2 max-w-2xl text-sm text-slate-500">
             A clean monthly view of content results for {monthLabel}, designed to keep reporting understandable at a glance.
           </p>
         </div>
-        <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
+        <div className="rounded-xl bg-[#f0ebfd] px-4 py-3 text-sm font-semibold text-slate-700">
           {postedRows.length} posted item{postedRows.length === 1 ? "" : "s"} with metrics
         </div>
       </div>
 
-      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="mt-5 rounded-xl border border-[#e8e3f5] bg-[#f8f5ff] p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Performance Month</div>
@@ -2553,7 +2532,7 @@ function PerformanceDashboard({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev Month</button>
+            <button type="button" onClick={onPreviousMonth} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">Prev Month</button>
             <input
               type="month"
               value={getMonthInputValue(monthDate)}
@@ -2561,16 +2540,16 @@ function PerformanceDashboard({
                 const next = parseMonthInputValue(event.target.value);
                 if (next) onChangeMonth?.(next);
               }}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+              className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors"
             />
-            <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next Month</button>
-            <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Current Month</button>
+            <button type="button" onClick={onNextMonth} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">Next Month</button>
+            <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-[#13122e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1e1c40] transition-colors">Current Month</button>
           </div>
         </div>
       </div>
 
       {clientOptions.length > 1 && (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="mt-4 rounded-xl border border-[#ddd4f5] bg-white p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Performance Scope</div>
@@ -2582,10 +2561,10 @@ function PerformanceDashboard({
               <button
                 type="button"
                 onClick={() => onSelectClient?.("All Clients")}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
                   selectedClientName === "All Clients"
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "border border-slate-200 bg-slate-50 text-slate-700"
+                    ? "bg-[#13122e] text-white shadow-[0_2px_8px_rgba(19,18,46,0.18)]"
+                    : "border border-[#ddd4f5] bg-[#f8f5ff] text-[#13122e] hover:bg-[#f0ebfd]"
                 }`}
               >
                 {allClientsLabel}
@@ -2595,9 +2574,9 @@ function PerformanceDashboard({
                   key={client}
                   type="button"
                   onClick={() => onSelectClient?.(client)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
                     selectedClientName === client
-                      ? "bg-slate-900 text-white shadow-sm"
+                      ? "bg-[#13122e] text-white shadow-sm"
                       : "border border-slate-200 bg-slate-50 text-slate-700"
                   }`}
                 >
@@ -2610,7 +2589,7 @@ function PerformanceDashboard({
       )}
 
       {platformOptions.length > 1 && (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="mt-4 rounded-xl border border-[#ddd4f5] bg-white p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Platform Scope</div>
@@ -2622,10 +2601,10 @@ function PerformanceDashboard({
               <button
                 type="button"
                 onClick={() => setSelectedPlatform("All Platforms")}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
                   selectedPlatform === "All Platforms"
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "border border-slate-200 bg-slate-50 text-slate-700"
+                    ? "bg-[#13122e] text-white shadow-[0_2px_8px_rgba(19,18,46,0.18)]"
+                    : "border border-[#ddd4f5] bg-[#f8f5ff] text-[#13122e] hover:bg-[#f0ebfd]"
                 }`}
               >
                 All Platforms
@@ -2635,9 +2614,9 @@ function PerformanceDashboard({
                   key={platform}
                   type="button"
                   onClick={() => setSelectedPlatform(platform)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
                     selectedPlatform === platform
-                      ? "bg-slate-900 text-white shadow-sm"
+                      ? "bg-[#13122e] text-white shadow-sm"
                       : "border border-slate-200 bg-slate-50 text-slate-700"
                   }`}
                 >
@@ -2650,7 +2629,7 @@ function PerformanceDashboard({
       )}
 
       {campaignOptions.length > 0 && (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="mt-4 rounded-xl border border-[#ddd4f5] bg-white p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Campaign Scope</div>
@@ -2662,10 +2641,10 @@ function PerformanceDashboard({
               <button
                 type="button"
                 onClick={() => setSelectedCampaign("All Campaigns")}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
                   selectedCampaign === "All Campaigns"
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "border border-slate-200 bg-slate-50 text-slate-700"
+                    ? "bg-[#13122e] text-white shadow-[0_2px_8px_rgba(19,18,46,0.18)]"
+                    : "border border-[#ddd4f5] bg-[#f8f5ff] text-[#13122e] hover:bg-[#f0ebfd]"
                 }`}
               >
                 All Campaigns
@@ -2675,9 +2654,9 @@ function PerformanceDashboard({
                   key={campaign}
                   type="button"
                   onClick={() => setSelectedCampaign(campaign)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
                     selectedCampaign === campaign
-                      ? "bg-slate-900 text-white shadow-sm"
+                      ? "bg-[#13122e] text-white shadow-sm"
                       : "border border-slate-200 bg-slate-50 text-slate-700"
                   }`}
                 >
@@ -2690,7 +2669,7 @@ function PerformanceDashboard({
       )}
 
       {postedRows.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+        <div className="mt-6 rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-8 text-center text-sm text-slate-500">
           {monthPostedRows.length === 0 && monthNonPostedMetricRows.length > 0
             ? `Metrics have been entered for ${monthLabel}, but those items are not marked Posted yet. Change the status to Posted for the saved metrics to appear in Performance Overview.`
             : monthPostedRows.length === 0
@@ -2780,7 +2759,7 @@ function PerformanceDashboard({
               { label: "Comments", value: totals.comments },
               { label: "Shares", value: totals.shares },
             ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div key={item.label} className="rounded-xl border border-[#ddd4f5] bg-slate-50 px-4 py-4">
                 <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
                 <div className="mt-3 text-3xl font-semibold text-slate-900">{formatMetricValue(item.value)}</div>
               </div>
@@ -2849,11 +2828,11 @@ function PerformanceDashboard({
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-2xl bg-slate-50 px-4 py-3">
                       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Impressions</div>
-                    <div className="mt-2 text-xl font-semibold text-slate-900">{formatMetricValue(getEffectiveMetricValue(row, "impressions"))}</div>
+                    <div className="mt-2 text-xl font-bold text-[#13122e]">{formatMetricValue(getEffectiveMetricValue(row, "impressions"))}</div>
                     </div>
                     <div className="rounded-2xl bg-slate-50 px-4 py-3">
                       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Clicks</div>
-                      <div className="mt-2 text-xl font-semibold text-slate-900">{formatMetricValue(getEffectiveMetricValue(row, "clicks"))}</div>
+                      <div className="mt-2 text-xl font-bold text-[#13122e]">{formatMetricValue(getEffectiveMetricValue(row, "clicks"))}</div>
                     </div>
                   </div>
                 </div>
@@ -2919,21 +2898,21 @@ function PerformanceDashboard({
 
 function PlannedPostsPanel({ rows }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-slate-900">Planned Posts</h3>
+          <h3 className="text-xl font-bold text-[#13122e]">Planned Posts</h3>
           <p className="text-sm text-slate-500">Frontend view of all planned content. This is read-only and meant for quick review.</p>
         </div>
         <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{rows.length} Posts</div>
       </div>
 
       {rows.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">No planned posts yet. Saved items from the planner will appear here.</div>
+        <div className="rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-8 text-center text-sm text-slate-500">No planned posts yet. Saved items from the planner will appear here.</div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {rows.map((plan) => (
-            <div key={plan.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div key={plan.id} className="rounded-xl border border-[#e8e3f5] bg-[#f8f5ff] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold text-slate-900">{plan.topic}</div>
@@ -2970,6 +2949,7 @@ function PlannedContentTable({
   onNextMonth,
   onGoToCurrentMonth,
   onDraftChange,
+  onProtectedDraftChange,
   onSaveUpdate,
   onEdit,
   onDelete,
@@ -3017,16 +2997,16 @@ function PlannedContentTable({
   }, [filteredRows, expandedPlanId]);
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-slate-900">Logged For Update</h3>
+          <h3 className="text-xl font-bold text-[#13122e]">Logged For Update</h3>
           <p className="text-sm text-slate-500">Review planned items that are now ready for live execution updates, metrics, links, and qualitative reporting notes.</p>
         </div>
         <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{filteredRows.length} Planned</div>
       </div>
       {monthDate && (
-        <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="mb-5 rounded-xl border border-[#e8e3f5] bg-[#f8f5ff] p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Update Queue Month</div>
@@ -3034,7 +3014,7 @@ function PlannedContentTable({
               <p className="mt-1 text-sm text-slate-500">Use month and date filters here to review the exact planning period you want.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev Month</button>
+              <button type="button" onClick={onPreviousMonth} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">Prev Month</button>
               <input
                 type="month"
                 value={getMonthInputValue(monthDate)}
@@ -3042,10 +3022,10 @@ function PlannedContentTable({
                   const next = parseMonthInputValue(event.target.value);
                   if (next) onChangeMonth?.(next);
                 }}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+                className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors"
               />
-              <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next Month</button>
-              <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Current Month</button>
+              <button type="button" onClick={onNextMonth} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">Next Month</button>
+              <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-[#13122e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1e1c40] transition-colors">Current Month</button>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -3053,13 +3033,13 @@ function PlannedContentTable({
               type="date"
               value={selectedDate}
               onChange={(event) => setSelectedDate(event.target.value)}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+              className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors"
             />
             {selectedDate && (
               <button
                 type="button"
                 onClick={() => setSelectedDate("")}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+                className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors"
               >
                 Clear Date
               </button>
@@ -3071,10 +3051,10 @@ function PlannedContentTable({
         <button
           type="button"
           onClick={() => setSelectedClient("All Clients")}
-          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+          className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
             selectedClient === "All Clients"
-              ? "bg-slate-900 text-white"
-              : "border border-slate-200 bg-white text-slate-700"
+              ? "bg-[#13122e] text-white shadow-[0_2px_8px_rgba(19,18,46,0.18)]"
+              : "border border-[#ddd4f5] bg-white text-[#13122e] hover:bg-[#f8f5ff]"
           }`}
         >
           All Clients
@@ -3084,9 +3064,9 @@ function PlannedContentTable({
             key={client}
             type="button"
             onClick={() => setSelectedClient(client)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
               selectedClient === client
-                ? "bg-slate-900 text-white"
+                ? "bg-[#13122e] text-white"
                 : "border border-slate-200 bg-white text-slate-700"
             }`}
           >
@@ -3098,10 +3078,10 @@ function PlannedContentTable({
         <button
           type="button"
           onClick={() => setSelectedPlatform("All Platforms")}
-          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+          className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
             selectedPlatform === "All Platforms"
-              ? "bg-slate-900 text-white"
-              : "border border-slate-200 bg-white text-slate-700"
+              ? "bg-[#13122e] text-white shadow-[0_2px_8px_rgba(19,18,46,0.18)]"
+              : "border border-[#ddd4f5] bg-white text-[#13122e] hover:bg-[#f8f5ff]"
           }`}
         >
           All Platforms
@@ -3111,9 +3091,9 @@ function PlannedContentTable({
             key={platform}
             type="button"
             onClick={() => setSelectedPlatform(platform)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
               selectedPlatform === platform
-                ? "bg-slate-900 text-white"
+                ? "bg-[#13122e] text-white"
                 : "border border-slate-200 bg-white text-slate-700"
             }`}
           >
@@ -3123,13 +3103,12 @@ function PlannedContentTable({
       </div>
       <div className="space-y-4">
         {filteredRows.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-8 text-center text-sm text-slate-500">
             {rows.length === 0
               ? "No planned log entries yet. Use the planner to create your first post."
               : "No planned entries match the current month, date, client, or platform filters."}
           </div>
         ) : filteredRows.map((plan) => {
-          const planKey = getPlanKey(plan);
           const isExpanded = expandedPlanId === plan.id;
           return (
             <div key={plan.id} className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 shadow-sm">
@@ -3201,27 +3180,32 @@ function PlannedContentTable({
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Update Status</label>
-                      <select value={plan.draftStatus} onChange={(e) => onDraftChange(planKey, "status", e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm">
+                      <select value={plan.draftStatus} onChange={(e) => onDraftChange(plan, "status", e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm">
                         <option value="">Select status</option>
                         {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Post Link</label>
-                      <input value={plan.draftPostLink} onChange={(e) => onDraftChange(planKey, "postLink", e.target.value)} placeholder="Paste URL" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm" />
+                      <input
+                        value={plan.draftPostLink}
+                        onChange={(e) => onProtectedDraftChange(plan, "postLink", e.target.value)}
+                        placeholder="Paste URL"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm"
+                      />
                     </div>
                   </div>
 
                   <div className="mt-4">
                     <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Update Notes</label>
-                    <textarea value={plan.draftNotes} onChange={(e) => onDraftChange(planKey, "notes", e.target.value)} rows={3} placeholder="Add update notes" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm" />
+                    <textarea value={plan.draftNotes} onChange={(e) => onDraftChange(plan, "notes", e.target.value)} rows={3} placeholder="Add update notes" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm" />
                   </div>
 
                   <div className="mt-4">
                     <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Qualitative Performance Notes</label>
                     <textarea
                       value={plan.draftQualitativeNotes}
-                      onChange={(e) => onDraftChange(planKey, "qualitativeNotes", e.target.value)}
+                      onChange={(e) => onDraftChange(plan, "qualitativeNotes", e.target.value)}
                       rows={3}
                       placeholder="Add audience reactions, brand sentiment, creative learnings, or qualitative observations"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm"
@@ -3248,7 +3232,7 @@ function PlannedContentTable({
                             type="number"
                             min="0"
                             value={plan[`draft${field.charAt(0).toUpperCase()}${field.slice(1)}`] ?? ""}
-                            onChange={(e) => onDraftChange(planKey, field, e.target.value)}
+                            onChange={(e) => onProtectedDraftChange(plan, field, e.target.value)}
                             placeholder={label}
                             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm"
                           />
@@ -3275,21 +3259,21 @@ function PlannedContentTable({
 
 function ExecutionStatusTable({ rows }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-slate-900">Execution Status Log</h3>
+          <h3 className="text-xl font-bold text-[#13122e]">Execution Status Log</h3>
           <p className="text-sm text-slate-500">Only saved updates from the planned content log appear here.</p>
         </div>
         <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{rows.length} Updates</div>
       </div>
       <div className="space-y-4 md:hidden">
         {rows.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-8 text-center text-sm text-slate-500">
             No execution updates yet. Saved updates from the planned log will appear here.
           </div>
         ) : rows.map((record) => (
-          <div key={record.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+          <div key={record.id} className="rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-slate-900">{record.topic || "-"}</div>
@@ -3304,9 +3288,9 @@ function ExecutionStatusTable({ rows }) {
             <div className="mt-4 text-sm text-slate-700">{record.notes || "-"}</div>
             {hasPerformanceMetrics(record) && (
               <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">Impressions {formatMetricValue(record.impressions)}</span>
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">Engagement {formatMetricValue(getEngagementTotal(record))}</span>
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">Clicks {formatMetricValue(record.clicks)}</span>
+                <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[#13122e]">Impressions {formatMetricValue(record.impressions)}</span>
+                <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[#13122e]">Engagement {formatMetricValue(getEngagementTotal(record))}</span>
+                <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[#13122e]">Clicks {formatMetricValue(record.clicks)}</span>
               </div>
             )}
             {record.postLink && (
@@ -3320,28 +3304,28 @@ function ExecutionStatusTable({ rows }) {
 
       <div className="hidden overflow-x-auto md:block">
         <table className="min-w-full border-separate border-spacing-y-3">
-          <thead><tr className="text-left text-sm text-slate-500"><th className="px-4">Date</th><th className="px-4">Platform</th><th className="px-4">Topic</th><th className="px-4">Status</th><th className="px-4">Time</th><th className="px-4">Performance</th><th className="px-4">Link</th><th className="px-4">Notes</th></tr></thead>
+          <thead><tr className="text-left"><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Date</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Platform</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Topic</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Status</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Time</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Performance</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Link</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Notes</th></tr></thead>
           <tbody>
             {rows.length === 0 ? (
               <tr className="bg-slate-50"><td colSpan={8} className="rounded-2xl px-4 py-8 text-center text-sm text-slate-500">No execution updates yet. Saved updates from the planned log will appear here.</td></tr>
             ) : rows.map((record) => (
-              <tr key={record.id} className="bg-slate-50">
-                <td className="rounded-l-2xl px-4 py-4 text-sm font-medium text-slate-900">{formatDateLabel(record.date)}</td>
-                <td className="px-4 py-4 text-sm text-slate-700">{record.platform}</td>
-                <td className="px-4 py-4 text-sm text-slate-700">{record.topic || "-"}</td>
-                <td className="px-4 py-4 text-sm"><span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(record.status)}`}>{record.status}</span></td>
-                <td className="px-4 py-4 text-sm text-slate-700">{formatTimeLabel(record.time)}</td>
-                <td className="px-4 py-4 text-sm text-slate-700">
+              <tr key={record.id} className="bg-[#faf8ff]">
+                <td className="rounded-l-xl px-4 py-3.5 text-xs font-semibold text-[#13122e]">{formatDateLabel(record.date)}</td>
+                <td className="px-4 py-3.5 text-xs font-medium text-slate-600">{record.platform}</td>
+                <td className="px-4 py-3.5 text-xs text-slate-600">{record.topic || "-"}</td>
+                <td className="px-4 py-3.5"><span className={`inline-flex rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${getStatusStyle(record.status)}`}>{record.status}</span></td>
+                <td className="px-4 py-3.5 text-xs text-slate-500">{formatTimeLabel(record.time)}</td>
+                <td className="px-4 py-3.5 text-xs text-slate-600">
                   {hasPerformanceMetrics(record) ? (
-                    <div className="space-y-1 text-xs font-semibold">
+                    <div className="space-y-0.5 text-[11px] font-semibold text-slate-700">
                       <div>Imp {formatMetricValue(record.impressions)}</div>
                       <div>Eng {formatMetricValue(getEngagementTotal(record))}</div>
                       <div>Clk {formatMetricValue(record.clicks)}</div>
                     </div>
                   ) : "-"}
                 </td>
-                <td className="px-4 py-4 text-sm font-medium text-slate-700">{record.postLink ? <a href={normalizeUrl(record.postLink)} className="text-slate-900 underline underline-offset-4" target="_blank" rel="noreferrer">View Post</a> : "-"}</td>
-                <td className="rounded-r-2xl px-4 py-4 text-sm text-slate-700">{record.notes || "-"}</td>
+                <td className="px-4 py-3.5 text-xs font-medium">{record.postLink ? <a href={normalizeUrl(record.postLink)} className="font-semibold text-[#7855c8] underline underline-offset-2" target="_blank" rel="noreferrer">View Post</a> : "-"}</td>
+                <td className="rounded-r-xl px-4 py-3.5 text-xs text-slate-500">{record.notes || "-"}</td>
               </tr>
             ))}
           </tbody>
@@ -3433,7 +3417,7 @@ function SnapshotPanel({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
             {isClientView ? "Client Dashboard" : "Dashboard View"}
           </p>
-          <h3 className="mt-2 text-2xl font-semibold text-slate-900">
+          <h3 className="mt-2 text-2xl font-bold text-[#13122e]">
             Plan vs Execution
           </h3>
           <p className="mt-2 max-w-2xl text-sm text-slate-500">
@@ -3441,7 +3425,7 @@ function SnapshotPanel({
             period-led dashboard view.
           </p>
         </div>
-        <div className="inline-flex w-full rounded-2xl bg-slate-100 p-1 xl:w-auto">
+        <div className="inline-flex w-full rounded-xl bg-[#f0ebfd] p-1 xl:w-auto">
           <button
             type="button"
             onClick={() => onToggle("daily")}
@@ -3473,7 +3457,7 @@ function SnapshotPanel({
       </div>
 
       {monthDate && (
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="mt-5 rounded-xl border border-[#e8e3f5] bg-[#f8f5ff] p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Reporting Month</div>
@@ -3483,7 +3467,7 @@ function SnapshotPanel({
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={onPreviousMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Prev Month</button>
+              <button type="button" onClick={onPreviousMonth} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">Prev Month</button>
               <input
                 type="month"
                 value={getMonthInputValue(monthDate)}
@@ -3491,17 +3475,17 @@ function SnapshotPanel({
                   const next = parseMonthInputValue(event.target.value);
                   if (next) onChangeMonth?.(next);
                 }}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+                className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors"
               />
-              <button type="button" onClick={onNextMonth} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Next Month</button>
-              <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Current Month</button>
+              <button type="button" onClick={onNextMonth} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors">Next Month</button>
+              <button type="button" onClick={onGoToCurrentMonth} className="rounded-2xl bg-[#13122e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1e1c40] transition-colors">Current Month</button>
             </div>
           </div>
         </div>
       )}
 
       {scopeLabels.length > 0 && (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="mt-4 rounded-xl border border-[#ddd4f5] bg-white p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Brand Scope</div>
@@ -3521,7 +3505,7 @@ function SnapshotPanel({
       )}
 
       {activeSummary.length === 0 || !featuredPeriod ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+        <div className="mt-6 rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-8 text-center text-sm text-slate-500">
           No snapshot data yet. Add planned posts and save status updates to generate reporting.
         </div>
       ) : (
@@ -3594,7 +3578,7 @@ function SnapshotPanel({
                       onClick={() => setSelectedPeriod(periodItem.period)}
                       className={`w-full rounded-2xl border p-4 text-left transition ${
                         isActive
-                          ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                          ? "border-slate-900 bg-[#13122e] text-white shadow-sm"
                           : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-slate-300"
                       }`}
                     >
@@ -3729,6 +3713,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   const [editingPlanId, setEditingPlanId] = useState(null);
   const [snapshotView, setSnapshotView] = useState("weekly");
   const [statusDrafts, setStatusDrafts] = useState(() => readStoredObject(STATUS_DRAFTS_STORAGE_KEY, {}));
+  const [protectedDraftEdits, setProtectedDraftEdits] = useState({});
   const [notice, setNotice] = useState("Ready for deployment.");
   const [isClientView, setIsClientView] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -4191,6 +4176,11 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     setPlans(deleted.plans);
     setStatusRecords(deleted.statusRecords);
     setStatusDrafts(deleted.statusDrafts);
+    setProtectedDraftEdits((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).filter(([key]) => !key.startsWith(`${planId}:`))
+      )
+    );
     if (editingPlanId === planId) {
       setEditingPlanId(null);
       resetPlanForm();
@@ -4204,7 +4194,40 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     setNotice("Edit cancelled.");
   }
 
-  const updateDraft = (planKey, field, value) => setStatusDrafts((prev) => ({ ...prev, [planKey]: { ...(prev[planKey] || EMPTY_STATUS_DRAFT), [field]: value } }));
+  function updateDraft(row, field, value) {
+    const planKey = getPlanKey(row);
+    setStatusDrafts((prev) => {
+      const existingDraft = prev[planKey];
+      const baseDraft = existingDraft ? existingDraft : createStatusDraftSnapshot(row);
+      return {
+        ...prev,
+        [planKey]: {
+          ...baseDraft,
+          [field]: value,
+        },
+      };
+    });
+  }
+
+  function updateProtectedDraft(row, field, value) {
+    const protectionKey = `${getPlanKey(row)}:${field}`;
+    const alreadyUnlocked = protectedDraftEdits[protectionKey];
+
+    if (!alreadyUnlocked && hasProtectedDraftValue(row, field)) {
+      const ok = typeof window === "undefined"
+        ? true
+        : window.confirm("This field already has saved data. Do you want to edit it?");
+
+      if (!ok) return;
+
+      setProtectedDraftEdits((prev) => ({
+        ...prev,
+        [protectionKey]: true,
+      }));
+    }
+
+    updateDraft(row, field, value);
+  }
 
   async function saveDraftToStatusLog(plan) {
     const planKey = getPlanKey(plan);
@@ -4248,6 +4271,11 @@ export default function ClientSocialMediaPostingTrackerInterface() {
           delete next[planKey];
           return next;
         });
+        setProtectedDraftEdits((prev) =>
+          Object.fromEntries(
+            Object.entries(prev).filter(([key]) => !key.startsWith(`${planKey}:`))
+          )
+        );
         setNotice(`Saved update for ${plan.platform} | ${plan.topic}`);
         await loadRemoteData(currentUser);
       } catch (error) {
@@ -4287,6 +4315,11 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       delete next[planKey];
       return next;
     });
+    setProtectedDraftEdits((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).filter(([key]) => !key.startsWith(`${planKey}:`))
+      )
+    );
     setNotice(`Saved update for ${plan.platform} | ${plan.topic}`);
   }
 
@@ -4306,6 +4339,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       setPlans(nextPlans);
       setStatusRecords(nextStatuses);
       setStatusDrafts({});
+      setProtectedDraftEdits({});
       setEditingPlanId(null);
       resetPlanForm();
       setNotice("Backup imported successfully.");
@@ -4321,6 +4355,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
     setPlans(DEFAULT_PLANS.map(withPlanId));
     setStatusRecords(DEFAULT_STATUS_RECORDS.map(withStatusId));
     setStatusDrafts({});
+    setProtectedDraftEdits({});
     setEditingPlanId(null);
     resetPlanForm();
     setNotice("Data reset completed.");
@@ -4619,6 +4654,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
       setPlans([]);
       setStatusRecords([]);
       setStatusDrafts({});
+      setProtectedDraftEdits({});
       setReportingMonthPinned(false);
       setActiveDataMonth(getMonthStart(new Date()));
       setSelectedClientName("All Clients");
@@ -4631,6 +4667,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
 
     setCurrentUser(null);
     setIsClientView(false);
+    setProtectedDraftEdits({});
     setReportingMonthPinned(false);
     setActiveDataMonth(getMonthStart(new Date()));
     setSelectedClientName("All Clients");
@@ -4696,7 +4733,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                   setSelectedCalendarOverflow(null);
                   setNotice(next ? "Client view enabled." : "Admin view enabled.");
                 }}
-                className="flex-shrink-0 rounded-xl border border-[#D8CCE9] bg-white px-3 py-2 text-sm font-semibold text-[#1C1C3F] hover:bg-slate-50"
+                className="flex-shrink-0 rounded-lg border border-[#ddd4f5] bg-white px-3.5 py-2 text-xs font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors"
               >
                 {isClientView ? "Admin View" : "Client View"}
               </button>
@@ -4714,7 +4751,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                 setSelectedCalendarOverflow(null);
                 setNotice(next ? "Client view enabled." : "Admin view enabled.");
               }}
-              className="rounded-xl border border-[#D8CCE9] bg-white px-3 py-2 text-sm font-semibold text-[#1C1C3F] hover:bg-slate-50"
+              className="rounded-lg border border-[#ddd4f5] bg-white px-3.5 py-2 text-xs font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors"
             >
               Admin View
             </button>
@@ -4765,7 +4802,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
           <div className="space-y-8">
             {isClientView && (
               <>
-                <div className="inline-flex rounded-2xl bg-slate-100 p-1">
+                <div className="inline-flex rounded-xl bg-[#f0ebfd] p-1">
                   <button
                     type="button"
                     onClick={() => setClientDashboardView("performance")}
@@ -4896,6 +4933,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
                     setActiveDataMonth(getMonthStart(new Date()));
                   }}
                   onDraftChange={updateDraft}
+                  onProtectedDraftChange={updateProtectedDraft}
                   onSaveUpdate={saveDraftToStatusLog}
                   onEdit={handleEditPlan}
                   onDelete={handleDeletePlan}
@@ -4906,7 +4944,7 @@ export default function ClientSocialMediaPostingTrackerInterface() {
             )}
             {!isClientView && adminWorkspace === "dashboard" && (
               <>
-                <div className="inline-flex rounded-2xl bg-slate-100 p-1">
+                <div className="inline-flex rounded-xl bg-[#f0ebfd] p-1">
                   <button
                     type="button"
                     onClick={() => setAdminDashboardView("performance")}
