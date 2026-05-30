@@ -53,6 +53,45 @@ const CONTENT_FORMAT_OPTIONS = [
 const STATUS_OPTIONS = ["Posted", "Awaiting Approval", "Missed", "Rescheduled"];
 const ACCESS_ROLE_OPTIONS = ["admin", "manager", "client"];
 const PERFORMANCE_METRIC_FIELDS = ["reach", "impressions", "views", "likes", "comments", "shares", "clicks"];
+
+const FEEDBACK_EMAIL = "kojo@itsdigitally.com";
+
+const METRIC_DEFINITIONS = {
+  Reach: "The number of unique accounts that saw your content at least once.",
+  Impressions: "The total number of times your content was displayed, including repeat views.",
+  Views: "Total video views recorded. What counts as a view varies by platform.",
+  Engagement: "Combined total of likes, comments, and shares.",
+  Likes: "Total likes recorded across published content.",
+  Comments: "Total comments left on published content.",
+  Shares: "Total shares and reposts of published content.",
+  Clicks: "Total link clicks attributed to this content.",
+  "Execution Score": "Posts published ÷ posts planned × 100. Shows how much of the planned content was delivered.",
+};
+
+const CLIENT_WELCOME_SESSION_KEY = "smf-client-welcome-seen";
+
+const CLIENT_TOUR_STEPS = [
+  {
+    title: "Welcome to your dashboard",
+    body: "This is your Social Media Flowboard — a live view of your content plan, publishing activity, and performance data. Digitally Done manages all planning and execution on your behalf.",
+  },
+  {
+    title: "Performance Overview",
+    body: "The Performance Overview tab shows monthly totals for reach, impressions, and engagement. Your account manager enters this data after content is published.",
+  },
+  {
+    title: "Plan vs Execution",
+    body: "The Plan vs Execution tab shows how much planned content was delivered. The Execution Score is the percentage of planned posts that were published.",
+  },
+  {
+    title: "Content Calendar",
+    body: "The Content Calendar shows every planned post for the selected month — what was scheduled, what went live, and the status of each item.",
+  },
+  {
+    title: "Have a question?",
+    body: "If you have questions about your data or want to discuss your content plan, use the Send Feedback button at the top of your dashboard to contact your account manager.",
+  },
+];
 const ADMIN_WORKSPACE_SECTIONS = [
   { id: "dashboard", label: "Dashboard", description: "Switch between performance reporting and plan-versus-execution insight." },
   { id: "planning", label: "Planning", description: "Create campaigns, organize content, and prepare content plans." },
@@ -1333,9 +1372,9 @@ function ModeBanner({ currentUser, sharedModeReady, syncState }) {
   );
 }
 
-function ClientViewBanner({ currentUser }) {
+function ClientViewBanner({ currentUser, onStartTour }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-[#ddd4f5] bg-[linear-gradient(135deg,#f3eefb,#ede8fa)] px-4 py-2.5 text-sm">
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#ddd4f5] bg-[linear-gradient(135deg,#f3eefb,#ede8fa)] px-4 py-2.5 text-sm">
       <div className="flex items-center gap-2">
         <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#7855c8]" />
         <span className="font-semibold text-[#13122e]">Client View</span>
@@ -1345,9 +1384,119 @@ function ClientViewBanner({ currentUser }) {
             : "· Backend editing tools are hidden"}
         </span>
       </div>
-      <span className="rounded-full border border-[#ddd4f5] bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[#7855c8]">
-        Share-Friendly
-      </span>
+      <div className="flex items-center gap-2">
+        <a
+          href={`mailto:${FEEDBACK_EMAIL}?subject=Feedback on SM Flowboard`}
+          className="rounded-full border border-[#ddd4f5] bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[#7855c8] hover:bg-[#f8f5ff] transition-colors"
+        >
+          Send Feedback
+        </a>
+        {onStartTour && (
+          <button
+            type="button"
+            onClick={onStartTour}
+            className="rounded-full border border-[#ddd4f5] bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[#7855c8] hover:bg-[#f8f5ff] transition-colors"
+          >
+            Take a Tour
+          </button>
+        )}
+        <span className="rounded-full border border-[#ddd4f5] bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[#7855c8]">
+          Share-Friendly
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ClientWelcomeModal({ clientName, onDismiss }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#13122e]/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-[0_24px_64px_rgba(19,18,46,0.28)]">
+        <div className="inline-flex rounded-full bg-[#f0ebfd] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#7855c8]">
+          Welcome
+        </div>
+        <h2 className="mt-4 text-2xl font-bold text-[#13122e]">
+          {clientName ? `Welcome, ${clientName}` : "Welcome to SM Flowboard"}
+        </h2>
+        <p className="mt-3 text-sm leading-7 text-slate-600">
+          Your dashboard is ready. Here's what you can see:
+        </p>
+        <ul className="mt-4 space-y-3">
+          {[
+            { label: "Planned Content", desc: "Content that Digitally Done has scheduled for your brand." },
+            { label: "Published Content", desc: "Posts that have gone live, with links and performance data." },
+            { label: "Performance Reporting", desc: "Monthly metrics including reach, impressions, and engagement." },
+          ].map((item) => (
+            <li key={item.label} className="flex items-start gap-3">
+              <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-[#7855c8]" />
+              <span className="text-sm text-slate-700">
+                <span className="font-semibold">{item.label}</span> — {item.desc}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-5 text-xs text-slate-400">
+          Digitally Done manages all planning and execution. This dashboard is read-only.
+        </p>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="mt-6 w-full rounded-xl bg-[#13122e] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1e1a40]"
+        >
+          Got it, let me explore
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ClientProductTour({ steps, currentStep, onNext, onPrev, onClose }) {
+  const step = steps[currentStep];
+  const isLast = currentStep === steps.length - 1;
+  return (
+    <div className="fixed bottom-6 right-6 z-50 w-80 rounded-2xl border border-[#ddd4f5] bg-white p-5 shadow-[0_8px_32px_rgba(19,18,46,0.18)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="inline-flex rounded-full bg-[#f0ebfd] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#7855c8]">
+          Step {currentStep + 1} of {steps.length}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs font-semibold text-slate-400 transition-colors hover:text-slate-700"
+        >
+          Skip
+        </button>
+      </div>
+      <h3 className="mt-3 text-base font-bold text-[#13122e]">{step.title}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{step.body}</p>
+      <div className="mt-5 flex items-center justify-between gap-3">
+        <div className="flex gap-1">
+          {steps.map((_, i) => (
+            <span
+              key={i}
+              className={`h-1.5 w-4 rounded-full transition-all ${i === currentStep ? "bg-[#7855c8]" : "bg-[#ddd4f5]"}`}
+            />
+          ))}
+        </div>
+        <div className="flex gap-2">
+          {currentStep > 0 && (
+            <button
+              type="button"
+              onClick={onPrev}
+              className="rounded-xl border border-[#ddd4f5] px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-[#f8f5ff]"
+            >
+              Back
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={isLast ? onClose : onNext}
+            className="rounded-xl bg-[#13122e] px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#1e1a40]"
+          >
+            {isLast ? "Done" : "Next"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2880,6 +3029,11 @@ function PerformanceDashboard({
     [postedRows, monthLabel]
   );
 
+  const latestPostedDate = useMemo(() => {
+    if (!postedRows.length) return null;
+    return postedRows.reduce((latest, row) => (row.date > latest ? row.date : latest), postedRows[0].date);
+  }, [postedRows]);
+
   return (
     <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -2891,6 +3045,11 @@ function PerformanceDashboard({
           <p className="mt-2 max-w-2xl text-sm text-slate-500">
             A clean monthly view of content results for {monthLabel}, designed to keep reporting understandable at a glance.
           </p>
+          {isClientView && latestPostedDate && (
+            <p className="mt-2 text-xs text-slate-400">
+              Most recent published content: {formatDateLabel(latestPostedDate)}
+            </p>
+          )}
         </div>
         <div className="rounded-xl bg-[#f0ebfd] px-4 py-3 text-sm font-semibold text-slate-700">
           {postedRows.length} posted item{postedRows.length === 1 ? "" : "s"} with metrics
@@ -3080,7 +3239,7 @@ function PerformanceDashboard({
                   { label: "Shares", value: totals.shares },
                 ].map((item) => (
                   <div key={item.label} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200">{item.label}</div>
+                    <div title={METRIC_DEFINITIONS[item.label]} className="cursor-help text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200">{item.label}</div>
                     <div className="mt-2 text-2xl font-semibold text-white">{formatMetricValue(item.value)}</div>
                   </div>
                 ))}
@@ -3137,7 +3296,7 @@ function PerformanceDashboard({
               { label: "Shares", value: totals.shares },
             ].map((item) => (
               <div key={item.label} className="rounded-xl border border-[#ddd4f5] bg-[#f8f5ff] px-4 py-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
+                <div title={METRIC_DEFINITIONS[item.label]} className="cursor-help text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
                 <div className="mt-3 text-3xl font-semibold text-slate-900">{formatMetricValue(item.value)}</div>
               </div>
             ))}
@@ -3921,7 +4080,9 @@ function SnapshotPanel({
 
       {activeSummary.length === 0 || !featuredPeriod ? (
         <div className="mt-6 rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-8 text-center text-sm text-slate-500">
-          No snapshot data yet. Add planned posts and save status updates to generate reporting.
+          {isClientView
+            ? `Content plans for ${monthLabel} haven't been added yet. Your account manager is responsible for building and updating your content plan. Check back soon.`
+            : "No snapshot data yet. Add planned posts and save status updates to generate reporting."}
         </div>
       ) : (
         <div className="mt-6 space-y-6">
@@ -3939,10 +4100,13 @@ function SnapshotPanel({
                   </p>
                 </div>
                 <div className="rounded-3xl border border-white/15 bg-white/10 px-5 py-4 backdrop-blur">
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">
+                  <div title={METRIC_DEFINITIONS["Execution Score"]} className="cursor-help text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">
                     Execution Score
                   </div>
                   <div className="mt-2 text-4xl font-semibold text-white">{featuredPeriod.executionScore}%</div>
+                  {isClientView && (
+                    <p className="mt-1 text-[10px] text-slate-300">{featuredPeriod.totals.posted} of {featuredPeriod.totals.planned} posts delivered</p>
+                  )}
                 </div>
               </div>
 
@@ -4157,6 +4321,11 @@ export default function ClientSocialMediaPostingTrackerInterface() {
   const [selectedCalendarOverflow, setSelectedCalendarOverflow] = useState(null);
   const [clientDashboardView, setClientDashboardView] = useState("performance");
   const [adminWorkspace, setAdminWorkspace] = useState("dashboard");
+  const [hasSeenWelcome, setHasSeenWelcome] = useState(() => {
+    try { return sessionStorage.getItem(CLIENT_WELCOME_SESSION_KEY) === "1"; } catch { return false; }
+  });
+  const [showTour, setShowTour] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
   const [adminDashboardView, setAdminDashboardView] = useState("performance");
 
   const trackerConfigIssue = getTrackerConfigIssue();
@@ -5431,7 +5600,12 @@ export default function ClientSocialMediaPostingTrackerInterface() {
         />
         <AppNotice message={notice} />
         {!isClientView && <ModeBanner currentUser={currentUser} sharedModeReady={sharedModeReady} syncState={syncState} />}
-        {isClientView && <ClientViewBanner currentUser={currentUser} />}
+        {isClientView && (
+          <ClientViewBanner
+            currentUser={currentUser}
+            onStartTour={currentUser?.role === "client" ? () => { setTourStep(0); setShowTour(true); } : undefined}
+          />
+        )}
         {!isClientView && <AccessSummary currentUser={currentUser} selectedClientName={selectedClientName} />}
         {!isClientView && canEdit(currentUser) && (
           <div className="flex items-center justify-between gap-3">
@@ -5849,6 +6023,24 @@ export default function ClientSocialMediaPostingTrackerInterface() {
           setSelectedCalendarPost(row);
         }}
       />
+      {isClientView && currentUser?.role === "client" && !hasSeenWelcome && (
+        <ClientWelcomeModal
+          clientName={currentUser.clientName}
+          onDismiss={() => {
+            setHasSeenWelcome(true);
+            try { sessionStorage.setItem(CLIENT_WELCOME_SESSION_KEY, "1"); } catch {}
+          }}
+        />
+      )}
+      {showTour && (
+        <ClientProductTour
+          steps={CLIENT_TOUR_STEPS}
+          currentStep={tourStep}
+          onNext={() => setTourStep((s) => s + 1)}
+          onPrev={() => setTourStep((s) => s - 1)}
+          onClose={() => setShowTour(false)}
+        />
+      )}
     </div>
   );
 }
