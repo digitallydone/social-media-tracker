@@ -1154,9 +1154,6 @@ function ClientViewBanner({ currentUser }) {
             : "· Backend editing tools are hidden"}
         </span>
       </div>
-      <span className="rounded-full border border-[#ddd4f5] bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[#7855c8]">
-        Share-Friendly
-      </span>
     </div>
   );
 }
