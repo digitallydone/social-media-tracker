@@ -1,4 +1,19 @@
-const { useEffect, useMemo, useState } = React;
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  SUPPORTED_SOCIAL_PLATFORMS,
+  validateSocialPostUrl,
+} from "./lib/socialPlatforms";
+import {
+  REVIEW_WORKFLOW_STATES,
+  createFailedMetricReview,
+  createFetchingMetricReview,
+  createNoFetchMetricReview,
+  fetchYouTubeMetricReview,
+  approveMetricReview,
+  rejectMetricReview,
+  getApprovedSavedMetricDraft,
+  getReviewWorkflowStateMeta,
+} from "./lib/autoSyncReview";
 
 const PLATFORM_NAME = "Social Media Flowboard";
 const PLATFORM_KICKER = "Digitally Done Platform";
@@ -7,7 +22,10 @@ const PLAN_STORAGE_KEY = "client-posting-tracker-plans";
 const STATUS_STORAGE_KEY = "client-posting-tracker-status-records";
 const SESSION_STORAGE_KEY = "client-posting-tracker-session";
 const STATUS_DRAFTS_STORAGE_KEY = "client-posting-tracker-status-drafts";
+const AUTO_SYNC_REVIEW_STORAGE_KEY = "client-posting-tracker-auto-sync-review-drafts";
 const CLIENT_DIRECTORY_STORAGE_KEY = "client-posting-tracker-client-directory";
+const META_ACCOUNTS_STORAGE_KEY = "client-posting-tracker-meta-accounts";
+const META_CONNECTIONS_STORAGE_KEY = "client-posting-tracker-meta-connections";
 const LEGACY_DEMO_CLIENT_NAMES = ["Acme Client", "Beta Foods"];
 
 const PLATFORM_OPTIONS = [
@@ -36,7 +54,9 @@ const CONTENT_FORMAT_OPTIONS = [
 
 const STATUS_OPTIONS = ["Posted", "Awaiting Approval", "Missed", "Rescheduled"];
 const ACCESS_ROLE_OPTIONS = ["admin", "manager", "client"];
-const PERFORMANCE_METRIC_FIELDS = ["reach", "impressions", "likes", "comments", "shares", "clicks"];
+const PERFORMANCE_METRIC_FIELDS = ["reach", "impressions", "views", "likes", "comments", "shares", "clicks"];
+const STATUS_RECORD_LEGACY_SELECT_FIELDS = "id, plan_id, client_name, campaign, date, platform, topic, format, time, status, post_link, notes, qualitative_notes, reach, impressions, likes, comments, shares, clicks";
+const STATUS_RECORD_SELECT_FIELDS = `${STATUS_RECORD_LEGACY_SELECT_FIELDS}, views`;
 const ADMIN_WORKSPACE_SECTIONS = [
   { id: "dashboard", label: "Dashboard", description: "Switch between performance reporting and plan-versus-execution insight." },
   { id: "planning", label: "Planning", description: "Create campaigns, organize content, and prepare content plans." },
@@ -48,7 +68,7 @@ const ADMIN_WORKSPACE_SECTIONS = [
 const DEMO_USERS = [
   { id: "admin-1", name: "Richard", role: "admin", clientName: "", mode: "demo" },
   { id: "manager-1", name: "Team Lead", role: "manager", clientName: "", mode: "demo" },
-  { id: "client-1", name: "Demo Client", role: "client", clientName: "", mode: "demo" },
+  { id: "client-1", name: "Demo Client", role: "client", clientName: "Acme Client", mode: "demo" },
 ];
 
 const EMPTY_PLAN_FORM = {
@@ -69,6 +89,7 @@ const EMPTY_STATUS_DRAFT = {
   qualitativeNotes: "",
   reach: "",
   impressions: "",
+  views: "",
   likes: "",
   comments: "",
   shares: "",
@@ -86,6 +107,57 @@ const EMPTY_CLIENT_FORM = {
   name: "",
   notes: "",
 };
+
+const META_ACCOUNT_PLATFORM_OPTIONS = [
+  { value: "facebook_page", label: "Facebook Page" },
+  { value: "instagram_business", label: "Instagram Business" },
+];
+
+const META_ACCOUNT_STATUS_OPTIONS = [
+  "active",
+  "needs_review",
+  "disabled",
+];
+
+const META_CONNECTION_STATUS_OPTIONS = [
+  "active",
+  "inactive",
+  "disabled",
+];
+
+const EMPTY_META_ACCOUNT_FORM = {
+  platform: META_ACCOUNT_PLATFORM_OPTIONS[0].value,
+  displayName: "",
+  externalAccountId: "",
+  username: "",
+  connectionStatus: "active",
+};
+
+const EMPTY_META_CONNECTION_FORM = {
+  accountId: "",
+  clientId: "",
+  connectionStatus: "active",
+};
+
+const META_SCHEMA_VARIANTS = [
+  {
+    id: "meta",
+    accountsTable: "meta_accounts",
+    connectionsTable: "meta_account_connections",
+  },
+  {
+    id: "legacy",
+    accountsTable: "social_accounts",
+    connectionsTable: "brand_social_connections",
+  },
+];
+
+const META_CONNECTION_EMPTY_STATE = [];
+
+const SNAPSHOT_CONTEXT_FIELDS = [
+  ["watchTime", "Watch Time"],
+  ["engagements", "Engagements"],
+];
 
 function createId(prefix = "item") {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
@@ -275,9 +347,36 @@ function formatTimeLabel(time) {
   });
 }
 
+function formatDateTimeLabel(value) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return parsed.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function normalizeUrl(url) {
   if (!url) return "";
   return url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
+}
+
+function getPostLinkValidationState(url) {
+  const trimmedUrl = String(url || "").trim();
+  if (!trimmedUrl) {
+    return {
+      hasValue: false,
+      supportedLabels: SUPPORTED_SOCIAL_PLATFORMS.map((platform) => platform.label).join(", "),
+    };
+  }
+
+  return {
+    hasValue: true,
+    ...validateSocialPostUrl(trimmedUrl),
+  };
 }
 
 function parseMetricValue(value) {
@@ -304,12 +403,24 @@ function getEffectiveMetricValue(row, field) {
   return parseMetricValue(row?.[field]);
 }
 
+function getSavedMetricValue(row, field) {
+  return parseMetricValue(row?.[field]);
+}
+
 function rowHasEffectiveMetrics(row) {
   return PERFORMANCE_METRIC_FIELDS.some((field) => getEffectiveMetricValue(row, field) !== null);
 }
 
+function rowHasSavedMetrics(row) {
+  return PERFORMANCE_METRIC_FIELDS.some((field) => getSavedMetricValue(row, field) !== null);
+}
+
 function getEffectiveRowStatus(row) {
   return resolveStatusValue(row?.draftStatus, row?.currentStatus);
+}
+
+function getSavedRowStatus(row) {
+  return resolveStatusValue(row?.currentStatus);
 }
 
 function getEffectiveRowEngagementTotal(row) {
@@ -318,8 +429,27 @@ function getEffectiveRowEngagementTotal(row) {
     + (getEffectiveMetricValue(row, "shares") || 0);
 }
 
+function getSavedRowEngagementTotal(row) {
+  return (getSavedMetricValue(row, "likes") || 0)
+    + (getSavedMetricValue(row, "comments") || 0)
+    + (getSavedMetricValue(row, "shares") || 0);
+}
+
 function getEffectiveQualitativeNotes(row) {
   return (row?.draftQualitativeNotes || row?.qualitativeNotes || "").trim();
+}
+
+function getSavedQualitativeNotes(row) {
+  return (row?.qualitativeNotes || "").trim();
+}
+
+function hasMetricValues(metrics = {}) {
+  return PERFORMANCE_METRIC_FIELDS.some((field) => parseMetricValue(metrics[field]) !== null);
+}
+
+function formatReviewMetricValue(value) {
+  const normalized = parseMetricValue(value);
+  return normalized === null ? "-" : formatMetricValue(normalized);
 }
 
 function getMostFrequentToken(values) {
@@ -332,13 +462,18 @@ function getMostFrequentToken(values) {
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
 }
 
-function buildQualitativeHighlights(rows, monthLabel) {
+function buildQualitativeHighlights(
+  rows,
+  monthLabel,
+  getRowEngagementTotal = getEffectiveRowEngagementTotal,
+  getQualitativeNotes = getEffectiveQualitativeNotes
+) {
   if (!rows.length) return [];
 
   const notes = rows
-    .map((row) => getEffectiveQualitativeNotes(row))
+    .map((row) => getQualitativeNotes(row))
     .filter(Boolean);
-  const strongestRow = [...rows].sort((a, b) => getEffectiveRowEngagementTotal(b) - getEffectiveRowEngagementTotal(a))[0] || null;
+  const strongestRow = [...rows].sort((a, b) => getRowEngagementTotal(b) - getRowEngagementTotal(a))[0] || null;
   const commonPlatform = getMostFrequentToken(rows.map((row) => row.platform));
   const commonCampaign = getMostFrequentToken(rows.map((row) => row.campaign));
 
@@ -378,10 +513,42 @@ function getEngagementTotal(record) {
 }
 
 function hasPerformanceMetrics(record) {
-  return ["reach", "impressions", "likes", "comments", "shares", "clicks"].some((key) => {
+  return PERFORMANCE_METRIC_FIELDS.some((key) => {
     const value = record?.[key];
     return value !== null && value !== undefined && value !== "";
   });
+}
+
+function isMissingViewsColumnError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("views") && (message.includes("column") || message.includes("schema cache"));
+}
+
+function buildStatusRecordsQuery(supabaseClient, user, selectFields) {
+  let query = supabaseClient
+    .from("status_records")
+    .select(selectFields)
+    .order("date", { ascending: true });
+
+  if (user.role === "client" && user.clientName) {
+    const clientScopes = parseClientScopeList(user.clientName);
+    if (clientScopes.length === 1) {
+      query = query.eq("client_name", clientScopes[0]);
+    } else if (clientScopes.length > 1) {
+      query = query.in("client_name", clientScopes);
+    }
+  }
+
+  return query;
+}
+
+async function loadStatusRowsWithViewsSupport(supabaseClient, user) {
+  const preferredResult = await buildStatusRecordsQuery(supabaseClient, user, STATUS_RECORD_SELECT_FIELDS);
+  if (!preferredResult.error || !isMissingViewsColumnError(preferredResult.error)) {
+    return preferredResult;
+  }
+
+  return buildStatusRecordsQuery(supabaseClient, user, STATUS_RECORD_LEGACY_SELECT_FIELDS);
 }
 
 function getStatusStyle(status) {
@@ -656,6 +823,7 @@ function buildMergedPlanRows(plans, statusRecords, statusDrafts) {
       currentPostLink: matchingStatus?.postLink || "",
       reach: matchingStatus?.reach ?? null,
       impressions: matchingStatus?.impressions ?? null,
+      views: matchingStatus?.views ?? null,
       likes: matchingStatus?.likes ?? null,
       comments: matchingStatus?.comments ?? null,
       shares: matchingStatus?.shares ?? null,
@@ -765,6 +933,10 @@ function canEdit(user) {
   return user && (user.role === "admin" || user.role === "manager");
 }
 
+function isAdmin(user) {
+  return user?.role === "admin";
+}
+
 function canViewMultipleClients(user) {
   return user && (
     user.role === "admin" ||
@@ -773,27 +945,88 @@ function canViewMultipleClients(user) {
   );
 }
 
+function hasValidClientScope(user) {
+  return !user || user.role !== "client" || parseClientScopeList(user.clientName).length > 0;
+}
+
+function isValidHttpUrl(value) {
+  if (!value) return false;
+  try {
+    const parsed = new URL(String(value).trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isPlaceholderConfigValue(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return true;
+  return normalized.includes("your_project_id")
+    || normalized.includes("your_supabase_anon_key")
+    || normalized.includes("your-hosted-tracker-domain.com");
+}
+
+function getTrackerConfigIssue() {
+  if (typeof window === "undefined") return "missing-config";
+  const config = window.TRACKER_CONFIG;
+  if (!config) return "missing-config";
+  if (!config.supabaseUrl || !config.supabaseAnonKey) return "missing-credentials";
+  if (isPlaceholderConfigValue(config.supabaseUrl) || isPlaceholderConfigValue(config.supabaseAnonKey)) {
+    return "placeholder-credentials";
+  }
+  if (!isValidHttpUrl(config.supabaseUrl)) return "invalid-supabase-url";
+  if (!window.supabase?.createClient) return "missing-sdk";
+  return null;
+}
+
+function getTrackerConfigNotice(issue) {
+  switch (issue) {
+    case "missing-credentials":
+      return "Supabase config is incomplete. Add the project URL and anon key in public/config.js before shared trial launch.";
+    case "placeholder-credentials":
+      return "Supabase config still contains placeholder values. Replace them in public/config.js before shared trial launch.";
+    case "invalid-supabase-url":
+      return "Supabase config contains an invalid project URL. Fix public/config.js before relying on shared mode.";
+    case "missing-sdk":
+      return "Supabase browser SDK is unavailable, so shared mode cannot initialize. Confirm the hosted app still loads the required script bundle.";
+    case "missing-config":
+    default:
+      return "This app is running in local demo mode because shared Supabase config is not available yet. Complete README-REMOTE-TRIAL.md, then add a valid public/config.js.";
+  }
+}
+
 function getTrackerConfig() {
   if (typeof window === "undefined") return null;
   return window.TRACKER_CONFIG || null;
 }
 
 function hasSharedConfiguration() {
-  const config = getTrackerConfig();
-  return Boolean(config?.supabaseUrl && config?.supabaseAnonKey && window.supabase?.createClient);
+  return getTrackerConfigIssue() === null;
 }
 
 function getSupabaseClient() {
   const config = getTrackerConfig();
   if (!config?.supabaseUrl || !config?.supabaseAnonKey || !window.supabase?.createClient) return null;
-  if (!window.__trackerSupabaseClient) {
-    window.__trackerSupabaseClient = window.supabase.createClient(
-      config.supabaseUrl,
-      config.supabaseAnonKey,
-      { auth: { persistSession: true, autoRefreshToken: true } }
-    );
+  try {
+    if (!window.__trackerSupabaseClient) {
+      window.__trackerSupabaseClient = window.supabase.createClient(
+        config.supabaseUrl,
+        config.supabaseAnonKey,
+        { auth: { persistSession: true, autoRefreshToken: true } }
+      );
+    }
+  } catch {
+    return null;
   }
   return window.__trackerSupabaseClient;
+}
+
+function getMagicLinkRedirectUrl(config) {
+  const configuredAppUrl = String(config?.appUrl || "").trim();
+  if (isValidHttpUrl(configuredAppUrl)) return configuredAppUrl;
+  if (typeof window !== "undefined") return window.location.origin;
+  return configuredAppUrl;
 }
 
 function mapDbPlan(row) {
@@ -827,6 +1060,7 @@ function mapDbStatus(row) {
     qualitativeNotes: row.qualitative_notes || "",
     reach: row.reach ?? null,
     impressions: row.impressions ?? null,
+    views: row.views ?? null,
     likes: row.likes ?? null,
     comments: row.comments ?? null,
     shares: row.shares ?? null,
@@ -865,6 +1099,7 @@ function toDbStatus(plan, draft, actorId) {
     qualitative_notes: draft.qualitativeNotes?.trim() || null,
     reach: parseMetricValue(draft.reach),
     impressions: parseMetricValue(draft.impressions),
+    views: parseMetricValue(draft.views),
     likes: parseMetricValue(draft.likes),
     comments: parseMetricValue(draft.comments),
     shares: parseMetricValue(draft.shares),
@@ -872,6 +1107,12 @@ function toDbStatus(plan, draft, actorId) {
     created_by: actorId,
     updated_by: actorId,
   };
+}
+
+function toDbStatusUpdate(plan, draft, actorId) {
+  const payload = toDbStatus(plan, draft, actorId);
+  const { created_by, ...updatePayload } = payload;
+  return updatePayload;
 }
 
 function mapDbInvite(row) {
@@ -893,6 +1134,149 @@ function mapDbClient(row) {
   };
 }
 
+function normalizeMetaAccountPlatform(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "facebook" || normalized === "facebook_page" || normalized === "facebook page") {
+    return "facebook_page";
+  }
+  if (normalized === "instagram" || normalized === "instagram_business" || normalized === "instagram business") {
+    return "instagram_business";
+  }
+  return "facebook_page";
+}
+
+function getMetaAccountPlatformLabel(value) {
+  return META_ACCOUNT_PLATFORM_OPTIONS.find((option) => option.value === normalizeMetaAccountPlatform(value))?.label || "Facebook Page";
+}
+
+function mapDbMetaAccount(row) {
+  const platform = normalizeMetaAccountPlatform(row.account_type || row.platform);
+  const displayName = row.display_name || row.provider_account_name || row.connection_label || row.name || "";
+  const externalAccountId = row.external_account_id || row.provider_account_id || row.account_id || "";
+  return {
+    id: row.id,
+    platform,
+    displayName,
+    externalAccountId,
+    username: row.username || row.handle || row.provider_account_handle || "",
+    connectionStatus: row.connection_status || "active",
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || "",
+  };
+}
+
+function mapDbMetaConnection(row, clientNameById = {}) {
+  const clientId = row.brand_id || row.client_id || row.client_directory_id || "";
+  return {
+    id: row.id,
+    accountId: row.meta_account_id || row.social_account_id || "",
+    clientId,
+    clientName: row.client_name || clientNameById[clientId] || "",
+    connectionStatus: row.connection_status || "active",
+    deactivatedAt: row.deactivated_at || row.disabled_at || "",
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || "",
+  };
+}
+
+function buildMetaAccountPayload(variantId, form, actorId) {
+  const normalizedPlatform = normalizeMetaAccountPlatform(form.platform);
+  const displayName = form.displayName.trim();
+  const externalAccountId = form.externalAccountId.trim();
+  const username = form.username.trim();
+  const connectionStatus = form.connectionStatus;
+
+  if (variantId === "legacy") {
+    return {
+      platform: normalizedPlatform === "facebook_page" ? "facebook" : "instagram",
+      account_type: normalizedPlatform,
+      provider_account_id: externalAccountId,
+      provider_account_name: displayName,
+      provider_account_handle: username || null,
+      connection_label: username ? `${displayName} (${username})` : displayName,
+      connection_status: connectionStatus,
+      created_by_profile_id: actorId,
+      updated_by_profile_id: actorId,
+    };
+  }
+
+  return {
+    platform: normalizedPlatform,
+    display_name: displayName,
+    external_account_id: externalAccountId,
+    username: username || null,
+    connection_status: connectionStatus,
+  };
+}
+
+function buildMetaConnectionPayload(variantId, form, actorId) {
+  if (variantId === "legacy") {
+    return {
+      brand_id: form.clientId,
+      social_account_id: form.accountId,
+      connection_status: form.connectionStatus,
+      connected_by_profile_id: actorId,
+      approved_by_profile_id: actorId,
+      approved_at: new Date().toISOString(),
+      deactivated_at: form.connectionStatus === "disabled" ? new Date().toISOString() : null,
+      deactivated_by_profile_id: form.connectionStatus === "disabled" ? actorId : null,
+    };
+  }
+
+  return {
+    brand_id: form.clientId,
+    meta_account_id: form.accountId,
+    connection_status: form.connectionStatus,
+  };
+}
+
+function buildMetaConnectionDisablePayload(variantId, actorId) {
+  if (variantId === "legacy") {
+    return {
+      connection_status: "disabled",
+      deactivated_at: new Date().toISOString(),
+      deactivated_by_profile_id: actorId,
+    };
+  }
+
+  return {
+    connection_status: "disabled",
+  };
+}
+
+function formatMetaStatusLabel(value) {
+  return String(value || "")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getMetaAccountSummaryLabel(account) {
+  if (!account) return "Unknown account";
+  return account.username ? `${account.displayName} (${account.username})` : account.displayName;
+}
+
+function enrichMetaConnections(accounts = [], connections = []) {
+  const accountById = new Map(accounts.map((account) => [account.id, account]));
+  return connections
+    .map((connection) => {
+      const account = accountById.get(connection.accountId) || null;
+      return {
+        ...connection,
+        account,
+        accountLabel: getMetaAccountSummaryLabel(account),
+        accountStatus: account?.connectionStatus || "",
+        platformLabel: account ? getMetaAccountPlatformLabel(account.platform) : "Meta Account",
+      };
+    })
+    .sort((a, b) => {
+      const brandCompare = String(a.clientName || "").localeCompare(String(b.clientName || ""));
+      if (brandCompare !== 0) return brandCompare;
+      return String(a.accountLabel || "").localeCompare(String(b.accountLabel || ""));
+    });
+}
+
 function runSelfChecks() {
   console.assert(normalizeUrl("example.com") === "https://example.com", "normalizeUrl should prepend https");
   console.assert(getMonthKey("2026-05-01").includes("2026"), "getMonthKey should include year");
@@ -910,6 +1294,7 @@ function LoginScreen({
   users,
   onLogin,
   sharedMode,
+  setupNotice,
   authEmail,
   onAuthEmailChange,
   onRequestMagicLink,
@@ -994,37 +1379,44 @@ function LoginScreen({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {users.map((user) => (
-              <button
-                key={user.id}
-                type="button"
-                onClick={() => onLogin(user)}
-                className="group rounded-2xl border border-[#e2d5f8] bg-white p-6 text-left shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)] transition-all hover:border-[#7855c8]/40 hover:shadow-[0_4px_16px_rgba(120,85,200,0.12),0_0_0_1px_rgba(120,85,200,0.12)]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#13122e] text-sm font-bold text-white shadow-[0_4px_12px_rgba(19,18,46,0.2)]">
-                      {user.name.charAt(0)}
+          <div className="space-y-4">
+            {setupNotice && (
+              <div className="rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] px-5 py-4 text-sm text-slate-600">
+                {setupNotice}
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              {users.map((user) => (
+                <button
+                  key={user.id}
+                  type="button"
+                  onClick={() => onLogin(user)}
+                  className="group rounded-2xl border border-[#e2d5f8] bg-white p-6 text-left shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)] transition-all hover:border-[#7855c8]/40 hover:shadow-[0_4px_16px_rgba(120,85,200,0.12),0_0_0_1px_rgba(120,85,200,0.12)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#13122e] text-sm font-bold text-white shadow-[0_4px_12px_rgba(19,18,46,0.2)]">
+                        {user.name.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="font-semibold text-[#13122e]">{user.name}</div>
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7855c8]">{user.role}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="font-semibold text-[#13122e]">{user.name}</div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7855c8]">{user.role}</div>
-                    </div>
+                    <span className="rounded-full border border-[#e2d5f8] bg-[#f3eefb] px-2.5 py-1 text-[10px] font-semibold text-[#7855c8] group-hover:border-[#7855c8]/30 group-hover:bg-[#ede8fb]">
+                      Enter →
+                    </span>
                   </div>
-                  <span className="rounded-full border border-[#e2d5f8] bg-[#f3eefb] px-2.5 py-1 text-[10px] font-semibold text-[#7855c8] group-hover:border-[#7855c8]/30 group-hover:bg-[#ede8fb]">
-                    Enter →
-                  </span>
-                </div>
-                <p className="mt-3.5 text-sm leading-relaxed text-slate-500">
-                  {user.role === "client"
-                    ? `View only for ${user.clientName || "assigned clients"}`
-                    : user.role === "manager"
-                      ? "Manage and report across all clients"
-                      : "Full access including setup and backend controls"}
-                </p>
-              </button>
-            ))}
+                  <p className="mt-3.5 text-sm leading-relaxed text-slate-500">
+                    {user.role === "client"
+                      ? `View only for ${user.clientName || "assigned clients"}`
+                      : user.role === "manager"
+                        ? "Manage and report across all clients"
+                        : "Full access including setup and backend controls"}
+                  </p>
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -1161,14 +1553,14 @@ function ClientViewBanner({ currentUser }) {
   );
 }
 
-function SharedSetupPanel() {
+function SharedSetupPanel({ message }) {
   return (
     <div className="rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h3 className="text-base font-bold text-[#13122e]">Remote Team Setup Needed</h3>
           <p className="mt-1.5 max-w-3xl text-sm text-slate-500">
-            This app is ready for shared hosting, but it is still running without backend credentials. Complete the Supabase setup in `README-REMOTE-TRIAL.md`, then copy `config.example.js` to `config.js` and fill in your project keys.
+            {message}
           </p>
         </div>
         <div className="flex-shrink-0 rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-xs font-semibold text-[#7855c8]">
@@ -1256,7 +1648,7 @@ function AccessManagementPanel({
 
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">Client Scope</label>
-              <div className={`rounded-xl border border-[#ddd4f5] bg-white p-3 ${inviteForm.role !== "client" ? "cursor-not-allowed bg-slate-100" : ""}`}>
+              <div className={`rounded-xl border border-[#ddd4f5] bg-white p-3 ${inviteForm.role !== "client" ? "cursor-not-allowed bg-[#f0ebfd]/60 opacity-60" : ""}`}>
                 {inviteForm.role === "client" ? (
                   clientOptions.length > 0 ? (
                     <>
@@ -1271,7 +1663,7 @@ function AccessManagementPanel({
                               className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
                                 selected
                                   ? "bg-[#13122e] text-white"
-                                  : "border border-slate-200 bg-white text-slate-700"
+                                  : "border border-[#ddd4f5] bg-white text-[#13122e] hover:bg-[#f8f5ff]"
                               }`}
                             >
                               {client}
@@ -1298,7 +1690,7 @@ function AccessManagementPanel({
           <button
             type="submit"
             disabled={inviteBusy}
-            className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-2xl bg-[#13122e] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1e1c40] transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
             {inviteBusy ? "Saving Access..." : "Save Access"}
           </button>
@@ -1425,6 +1817,268 @@ function ClientDirectoryPanel({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MetaConnectionsPanel({
+  currentUser,
+  metaAccounts,
+  metaConnections,
+  clients,
+  metaAccountForm,
+  metaConnectionForm,
+  editingMetaAccountId,
+  editingMetaConnectionId,
+  metaBusy,
+  onMetaAccountFormChange,
+  onMetaConnectionFormChange,
+  onMetaAccountSubmit,
+  onMetaConnectionSubmit,
+  onMetaAccountEdit,
+  onMetaConnectionEdit,
+  onMetaConnectionDisable,
+  onMetaConnectionDelete,
+  onMetaAccountCancel,
+  onMetaConnectionCancel,
+}) {
+  const accountOptions = metaAccounts.map((account) => ({
+    value: account.id,
+    label: `${getMetaAccountSummaryLabel(account)} · ${getMetaAccountPlatformLabel(account.platform)}`,
+  }));
+  const isAdminUser = isAdmin(currentUser);
+
+  return (
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
+      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h3 className="text-xl font-bold text-[#13122e]">Meta Connections</h3>
+          <p className="mt-1 max-w-3xl text-sm text-slate-500">
+            Manual Meta account records only. No OAuth, no token controls, and no Meta API calls are exposed here.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs font-semibold">
+          <span className="rounded-xl border border-[#ddd4f5] bg-[#f3eefb] px-3 py-2 text-[#7855c8]">
+            {metaAccounts.length} {metaAccounts.length === 1 ? "Account" : "Accounts"}
+          </span>
+          <span className="rounded-xl border border-[#ddd4f5] bg-[#f8f5ff] px-3 py-2 text-slate-600">
+            {metaConnections.length} {metaConnections.length === 1 ? "Mapping" : "Mappings"}
+          </span>
+        </div>
+      </div>
+
+      {isAdminUser ? (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(320px,1fr)_minmax(0,1.35fr)]">
+          <div className="space-y-6">
+            <form onSubmit={onMetaAccountSubmit} className="space-y-4 rounded-xl border border-[#ddd4f5] bg-[#f8f5ff] p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">Meta Account Record</h4>
+                {editingMetaAccountId && (
+                  <button type="button" onClick={onMetaAccountCancel} className="text-xs font-semibold text-[#7855c8] hover:text-[#5b4a88]">
+                    Cancel edit
+                  </button>
+                )}
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Platform</label>
+                <select
+                  value={metaAccountForm.platform}
+                  onChange={(event) => onMetaAccountFormChange("platform", event.target.value)}
+                  className="w-full rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-sm text-[#13122e] outline-none focus:border-[#7855c8]"
+                >
+                  {META_ACCOUNT_PLATFORM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Display Name</label>
+                <input
+                  value={metaAccountForm.displayName}
+                  onChange={(event) => onMetaAccountFormChange("displayName", event.target.value)}
+                  className="w-full rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-sm text-[#13122e] outline-none focus:border-[#7855c8]"
+                  placeholder="Digitally Done"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">External Account ID</label>
+                <input
+                  value={metaAccountForm.externalAccountId}
+                  onChange={(event) => onMetaAccountFormChange("externalAccountId", event.target.value)}
+                  className="w-full rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-sm text-[#13122e] outline-none focus:border-[#7855c8]"
+                  placeholder="1234567890"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Username / Handle</label>
+                <input
+                  value={metaAccountForm.username}
+                  onChange={(event) => onMetaAccountFormChange("username", event.target.value)}
+                  className="w-full rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-sm text-[#13122e] outline-none focus:border-[#7855c8]"
+                  placeholder="@digitallydone"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Connection Status</label>
+                <select
+                  value={metaAccountForm.connectionStatus}
+                  onChange={(event) => onMetaAccountFormChange("connectionStatus", event.target.value)}
+                  className="w-full rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-sm text-[#13122e] outline-none focus:border-[#7855c8]"
+                >
+                  {META_ACCOUNT_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>{formatMetaStatusLabel(status)}</option>
+                  ))}
+                </select>
+              </div>
+              <button type="submit" disabled={metaBusy} className="w-full rounded-xl bg-[#13122e] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1e1c40] disabled:cursor-not-allowed disabled:opacity-60">
+                {metaBusy ? "Saving Meta Account..." : editingMetaAccountId ? "Update Meta Account" : "Save Meta Account"}
+              </button>
+            </form>
+
+            <form onSubmit={onMetaConnectionSubmit} className="space-y-4 rounded-xl border border-[#ddd4f5] bg-[#f8f5ff] p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">Brand Mapping</h4>
+                {editingMetaConnectionId && (
+                  <button type="button" onClick={onMetaConnectionCancel} className="text-xs font-semibold text-[#7855c8] hover:text-[#5b4a88]">
+                    Cancel edit
+                  </button>
+                )}
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Meta Account</label>
+                <select
+                  value={metaConnectionForm.accountId}
+                  onChange={(event) => onMetaConnectionFormChange("accountId", event.target.value)}
+                  className="w-full rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-sm text-[#13122e] outline-none focus:border-[#7855c8]"
+                >
+                  <option value="">Select a Meta account</option>
+                  {accountOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Brand / Client</label>
+                <select
+                  value={metaConnectionForm.clientId}
+                  onChange={(event) => onMetaConnectionFormChange("clientId", event.target.value)}
+                  className="w-full rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-sm text-[#13122e] outline-none focus:border-[#7855c8]"
+                >
+                  <option value="">Select a client brand</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>{client.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Mapping Status</label>
+                <select
+                  value={metaConnectionForm.connectionStatus}
+                  onChange={(event) => onMetaConnectionFormChange("connectionStatus", event.target.value)}
+                  className="w-full rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-sm text-[#13122e] outline-none focus:border-[#7855c8]"
+                >
+                  {META_CONNECTION_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>{formatMetaStatusLabel(status)}</option>
+                  ))}
+                </select>
+              </div>
+              <button type="submit" disabled={metaBusy} className="w-full rounded-xl bg-[#13122e] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1e1c40] disabled:cursor-not-allowed disabled:opacity-60">
+                {metaBusy ? "Saving Mapping..." : editingMetaConnectionId ? "Update Mapping" : "Save Mapping"}
+              </button>
+            </form>
+          </div>
+
+          <div className="space-y-6">
+            <div className="rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-5">
+              <h4 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">Saved Meta Accounts</h4>
+              <div className="mt-4 space-y-3">
+                {metaAccounts.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[#ddd4f5] bg-white p-6 text-center text-sm text-slate-500">
+                    No Meta account records have been added yet.
+                  </div>
+                ) : metaAccounts.map((account) => (
+                  <div key={account.id} className="rounded-xl border border-[#ddd4f5] bg-white p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="font-semibold text-[#13122e]">{getMetaAccountSummaryLabel(account)}</div>
+                        <div className="mt-1 flex flex-wrap gap-2 text-xs font-semibold">
+                          <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-slate-600">{getMetaAccountPlatformLabel(account.platform)}</span>
+                          <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-slate-600">{formatMetaStatusLabel(account.connectionStatus)}</span>
+                        </div>
+                        <div className="mt-2 text-sm text-slate-500">External ID: {account.externalAccountId || "-"}</div>
+                      </div>
+                      <button type="button" disabled={metaBusy} onClick={() => onMetaAccountEdit(account)} className="rounded-lg border border-[#ddd4f5] bg-white px-3 py-1.5 text-xs font-semibold text-[#13122e] hover:bg-[#f8f5ff] disabled:opacity-60">
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-5">
+              <h4 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">Brand Mappings</h4>
+              <div className="mt-4 space-y-3">
+                {metaConnections.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[#ddd4f5] bg-white p-6 text-center text-sm text-slate-500">
+                    No Meta account mappings have been created yet.
+                  </div>
+                ) : metaConnections.map((connection) => (
+                  <div key={connection.id} className="rounded-xl border border-[#ddd4f5] bg-white p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <div className="font-semibold text-[#13122e]">{connection.clientName || "Unassigned brand"}</div>
+                        <div className="mt-1 text-sm text-slate-500">
+                          {connection.accountLabel || "Missing account label"} · {connection.platformLabel || "Meta"}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+                          <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-slate-600">{formatMetaStatusLabel(connection.connectionStatus)}</span>
+                          {connection.accountStatus && (
+                            <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-slate-600">
+                              Account: {formatMetaStatusLabel(connection.accountStatus)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" disabled={metaBusy} onClick={() => onMetaConnectionEdit(connection)} className="rounded-lg border border-[#ddd4f5] bg-white px-3 py-1.5 text-xs font-semibold text-[#13122e] hover:bg-[#f8f5ff] disabled:opacity-60">
+                          Edit
+                        </button>
+                        <button type="button" disabled={metaBusy || connection.connectionStatus === "disabled"} onClick={() => onMetaConnectionDisable(connection)} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60">
+                          Disable
+                        </button>
+                        <button type="button" disabled={metaBusy} onClick={() => onMetaConnectionDelete(connection)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 disabled:opacity-60">
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {metaConnections.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-6 text-center text-sm text-slate-500">
+              No connected Meta account labels are currently visible for your role.
+            </div>
+          ) : metaConnections.map((connection) => (
+            <div key={connection.id} className="rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="font-semibold text-[#13122e]">{connection.clientName || "Mapped brand"}</div>
+                  <div className="mt-1 text-sm text-slate-500">{connection.accountLabel || "Meta account"} · {connection.platformLabel || "Meta"}</div>
+                </div>
+                <span className="rounded-lg border border-[#ddd4f5] bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
+                  {formatMetaStatusLabel(connection.connectionStatus)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1763,7 +2417,7 @@ function PlanningLogSummary({
           <h3 className="text-xl font-bold text-[#13122e]">Planned Log</h3>
           <p className="mt-1 text-sm text-slate-500">A filtered planning-side view of every item created from Planned Content Entry.</p>
         </div>
-        <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{filteredRows.length} Entries</div>
+        <div className="rounded-full bg-[#f0ebfd] px-4 py-2 text-sm font-semibold text-[#7855c8]">{filteredRows.length} Entries</div>
       </div>
 
       {monthDate && (
@@ -1853,7 +2507,7 @@ function PlanningLogSummary({
             No planned entries match the current month, date, client, or platform filters.
           </div>
         ) : filteredRows.map((row) => (
-          <div key={row.id} className="rounded-xl border border-[#ddd4f5] bg-slate-50 px-4 py-4">
+          <div key={row.id} className="rounded-xl border border-[#ddd4f5] bg-[#f8f5ff] px-4 py-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-slate-900">{row.topic || "-"}</div>
@@ -1875,8 +2529,8 @@ function PlanningLogSummary({
 function ModalShell({ title, subtitle, onClose, children }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white/95 px-6 py-5 backdrop-blur">
+      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-[#ddd4f5] bg-white shadow-[0_8px_64px_rgba(19,18,46,0.18),0_0_0_1px_rgba(120,85,200,0.06)]">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[#ddd4f5] bg-white/95 px-6 py-5 backdrop-blur">
           <div>
             <h3 className="text-2xl font-bold text-[#13122e]">{title}</h3>
             {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
@@ -1955,6 +2609,7 @@ function CalendarPostDetailsDialog({ post, onClose }) {
             {[
               { label: "Reach", value: post.reach },
               { label: "Impressions", value: post.impressions },
+              { label: "Views", value: post.views },
               { label: "Likes", value: post.likes },
               { label: "Comments", value: post.comments },
               { label: "Shares", value: post.shares },
@@ -1976,7 +2631,7 @@ function CalendarPostDetailsDialog({ post, onClose }) {
             href={normalizeUrl(post.currentPostLink)}
             target="_blank"
             rel="noreferrer"
-            className="mt-3 inline-flex rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white"
+            className="mt-3 inline-flex rounded-2xl bg-[#13122e] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1e1c40] transition-colors"
           >
             View Post
           </a>
@@ -2001,7 +2656,7 @@ function CalendarDayDetailsDialog({ dayLabel, rows, onClose, onSelectRow }) {
             key={row.id}
             type="button"
             onClick={() => onSelectRow?.(row)}
-            className="w-full rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-4 text-left transition hover:border-slate-300 hover:bg-white"
+            className="w-full rounded-xl border border-[#e8e3f5] bg-[#faf8ff] p-4 text-left transition hover:border-[#7855c8]/30 hover:bg-white"
           >
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
@@ -2009,7 +2664,7 @@ function CalendarDayDetailsDialog({ dayLabel, rows, onClose, onSelectRow }) {
                 <div className="mt-1 text-xs text-slate-500">{row.clientName} | {row.platform}</div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                <span className="rounded-full border border-[#ddd4f5] bg-[#f8f5ff] px-3 py-1 text-xs font-semibold text-[#13122e]">
                   {formatTimeLabel(row.time)}
                 </span>
                 {row.currentStatus !== "-" && (
@@ -2080,11 +2735,11 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onSelectR
       key={row.id}
       type="button"
       onClick={() => onSelectRow?.(row)}
-      className="w-full rounded-full border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50"
+      className="w-full rounded-lg border border-[#e8e3f5] bg-white px-3 py-2 text-left transition hover:border-[#7855c8]/30 hover:bg-[#faf8ff]"
     >
       <div className="flex items-center justify-between gap-2">
         <span className="truncate text-[11px] font-semibold text-slate-800">{row.platform}</span>
-        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${row.currentStatus === "-" ? "border-slate-200 bg-slate-100 text-slate-500" : getStatusStyle(row.currentStatus)}`}>
+        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${row.currentStatus === "-" ? "border-[#ddd4f5] bg-[#f0ebfd] text-[#7855c8]" : getStatusStyle(row.currentStatus)}`}>
           {row.currentStatus === "-" ? "Planned" : row.currentStatus}
         </span>
       </div>
@@ -2205,7 +2860,7 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onSelectR
         <>
       <div className="hidden grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-          <div key={day} className="rounded-xl bg-slate-50 px-2 py-3">{day}</div>
+          <div key={day} className="rounded-xl bg-[#f0ebfd] px-2 py-3">{day}</div>
         ))}
       </div>
 
@@ -2229,11 +2884,11 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onSelectR
                     key={row.id}
                     type="button"
                     onClick={() => onSelectRow?.(row)}
-                    className="w-full rounded-full border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                    className="w-full rounded-lg border border-[#e8e3f5] bg-white px-3 py-2 text-left transition hover:border-[#7855c8]/30 hover:bg-[#faf8ff]"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate text-[11px] font-semibold text-slate-800">{row.platform}</span>
-                      <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${row.currentStatus === "-" ? "border-slate-200 bg-slate-100 text-slate-500" : getStatusStyle(row.currentStatus)}`}>
+                      <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${row.currentStatus === "-" ? "border-[#ddd4f5] bg-[#f0ebfd] text-[#7855c8]" : getStatusStyle(row.currentStatus)}`}>
                         {row.currentStatus === "-" ? "Planned" : row.currentStatus}
                       </span>
                     </div>
@@ -2273,11 +2928,11 @@ function CalendarView({ rows, monthDate, onPreviousMonth, onNextMonth, onSelectR
                       key={row.id}
                       type="button"
                       onClick={() => onSelectRow?.(row)}
-                      className="w-full rounded-full border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                      className="w-full rounded-lg border border-[#e8e3f5] bg-white px-3 py-2 text-left transition hover:border-[#7855c8]/30 hover:bg-[#faf8ff]"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-[11px] font-semibold text-slate-800">{row.platform}</span>
-                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${row.currentStatus === "-" ? "border-slate-200 bg-slate-100 text-slate-500" : getStatusStyle(row.currentStatus)}`}>
+                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${row.currentStatus === "-" ? "border-[#ddd4f5] bg-[#f0ebfd] text-[#7855c8]" : getStatusStyle(row.currentStatus)}`}>
                           {row.currentStatus === "-" ? "Planned" : row.currentStatus}
                         </span>
                       </div>
@@ -2345,11 +3000,167 @@ function ClientScopePanel({ title, description, selectedClientName, clientOption
         </div>
         <div className="flex flex-wrap gap-2">
           {scopeLabels.map((label) => (
-            <span key={label} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
+            <span key={label} className="rounded-full border border-[#ddd4f5] bg-[#f8f5ff] px-4 py-2 text-sm font-semibold text-[#13122e]">
               {label}
             </span>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function FetchedMetricsReviewPanel({
+  plan,
+  review,
+  canFetchDemoMetrics,
+  onFetch,
+  onApprove,
+  onReject,
+  busy = false,
+}) {
+  const stateMeta = getReviewWorkflowStateMeta(review.reviewState);
+  const savedMetrics = PERFORMANCE_METRIC_FIELDS.reduce((result, field) => {
+    result[field] = plan[field];
+    return result;
+  }, {});
+  const fetchedPreview = review.snapshot?.savedMetricPreview || {};
+  const fetchedMetrics = review.snapshot?.metrics || {};
+  const showSnapshot = Boolean(review.snapshot);
+  const hasSavedMetrics = hasMetricValues(savedMetrics);
+  const hasFetchedPreview = hasMetricValues(fetchedPreview);
+  const isFetching = review.reviewState === REVIEW_WORKFLOW_STATES.FETCHING;
+  const canApprove = review.reviewState === REVIEW_WORKFLOW_STATES.FETCHED_DRAFT && hasFetchedPreview;
+  const canReject = review.reviewState === REVIEW_WORKFLOW_STATES.FETCHED_DRAFT;
+  const sourceUrl = review.parseResult?.normalizedUrl || "";
+
+  return (
+    <div className="mt-4 rounded-2xl border border-[#ddd4f5] bg-[#f8f5ff] p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Review Fetched Metrics</div>
+          <p className="mt-2 max-w-2xl text-sm text-slate-600">{review.message}</p>
+        </div>
+        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${stateMeta.toneClassName}`}>
+          {stateMeta.label}
+        </span>
+      </div>
+
+      <div className="mt-3 rounded-xl border border-[#e8e3f5] bg-white px-3 py-3 text-xs text-slate-600">
+        Manual metrics remain the primary reporting source. Approve only stages fetched values into the local draft fields, and reporting changes only after <span className="font-semibold text-slate-900">Save Update</span>.
+      </div>
+
+      {review.reviewState === REVIEW_WORKFLOW_STATES.FAILED && (
+        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-xs text-red-700">
+          {review.errorMessage}
+        </div>
+      )}
+
+      {showSnapshot && (
+        <>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <div className="rounded-xl border border-[#e8e3f5] bg-white p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Saved Reporting Metrics Now</div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {[
+                  ["reach", "Reach"],
+                  ["impressions", "Impressions"],
+                  ["views", "Views"],
+                  ["likes", "Likes"],
+                  ["comments", "Comments"],
+                  ["shares", "Shares"],
+                  ["clicks", "Clicks"],
+                ].map(([field, label]) => (
+                  <div key={field} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">{formatReviewMetricValue(savedMetrics[field])}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 text-xs text-slate-500">
+                {hasSavedMetrics ? "These are the currently trusted saved values." : "No saved reporting metrics exist yet for this item."}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[#e8e3f5] bg-white p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Fetched Draft Preview</div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {[
+                  ["reach", "Reach"],
+                  ["impressions", "Impressions"],
+                  ["views", "Views"],
+                  ["likes", "Likes"],
+                  ["comments", "Comments"],
+                  ["shares", "Shares"],
+                  ["clicks", "Clicks"],
+                ].map(([field, label]) => (
+                  <div key={field} className="rounded-lg border border-[#ddd4f5] bg-[#faf8ff] px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">{formatReviewMetricValue(fetchedPreview[field])}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 text-xs text-slate-500">
+                Only mapped fields are eligible for manual approval into today&apos;s saved-metrics draft.
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-xl border border-[#e8e3f5] bg-white p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Snapshot-Only Context</div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {SNAPSHOT_CONTEXT_FIELDS.map(([field, label]) => (
+                <div key={field} className="rounded-lg border border-[#ddd4f5] bg-[#faf8ff] px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900">{formatReviewMetricValue(fetchedMetrics[field])}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
+              <span>Fetched: {formatDateTimeLabel(review.fetchedAt || review.snapshot?.fetchedAt)}</span>
+              {review.approvedAt && <span>Approved: {formatDateTimeLabel(review.approvedAt)}</span>}
+              {review.rejectedAt && <span>Rejected: {formatDateTimeLabel(review.rejectedAt)}</span>}
+              {sourceUrl && (
+                <a href={sourceUrl} target="_blank" rel="noreferrer" className="font-semibold text-[#7855c8] underline underline-offset-2">
+                  Open source link
+                </a>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onFetch}
+          disabled={busy || isFetching || !canFetchDemoMetrics}
+          className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-sm font-semibold text-[#13122e] transition-colors hover:bg-[#f8f5ff] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isFetching ? "Fetching Metrics..." : showSnapshot ? "Fetch Metrics Again" : "Fetch Metrics"}
+        </button>
+        <button
+          type="button"
+          onClick={onApprove}
+          disabled={busy || !canApprove}
+          className="rounded-xl bg-[#7855c8] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#6644b8] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Approve
+        </button>
+        <button
+          type="button"
+          onClick={onReject}
+          disabled={busy || !canReject}
+          className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-2.5 text-sm font-semibold text-[#13122e] transition-colors hover:bg-[#f8f5ff] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Reject
+        </button>
+      </div>
+
+      <div className="mt-3 text-xs text-slate-500">
+        {canFetchDemoMetrics
+          ? "YouTube fetch is available only for supported YouTube post links in this phase. Live API data is used when configured, otherwise the local demo fallback stays available."
+          : "Fetch is unavailable until a supported YouTube post link is present. Manual metrics can still be entered below."}
       </div>
     </div>
   );
@@ -2413,7 +3224,7 @@ function PerformanceDashboard({
   const postedRows = useMemo(
     () =>
       scopedRows.filter(
-        (row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() === "posted" && rowHasEffectiveMetrics(row)
+        (row) => String(getSavedRowStatus(row)).trim().toLowerCase() === "posted" && rowHasSavedMetrics(row)
       ),
     [scopedRows]
   );
@@ -2421,7 +3232,7 @@ function PerformanceDashboard({
   const postedRowsWithAnyMetricsAcrossMonths = useMemo(
     () =>
       scopedAllRows.filter(
-        (row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() === "posted" && rowHasEffectiveMetrics(row)
+        (row) => String(getSavedRowStatus(row)).trim().toLowerCase() === "posted" && rowHasSavedMetrics(row)
       ),
     [scopedAllRows]
   );
@@ -2439,14 +3250,14 @@ function PerformanceDashboard({
   }, [postedRowsWithAnyMetricsAcrossMonths]);
 
   const monthPostedRows = useMemo(
-    () => scopedRows.filter((row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() === "posted"),
+    () => scopedRows.filter((row) => String(getSavedRowStatus(row)).trim().toLowerCase() === "posted"),
     [scopedRows]
   );
 
   const monthNonPostedMetricRows = useMemo(
     () =>
       scopedRows.filter(
-        (row) => String(getEffectiveRowStatus(row)).trim().toLowerCase() !== "posted" && rowHasEffectiveMetrics(row)
+        (row) => String(getSavedRowStatus(row)).trim().toLowerCase() !== "posted" && rowHasSavedMetrics(row)
       ),
     [scopedRows]
   );
@@ -2454,15 +3265,16 @@ function PerformanceDashboard({
   const totals = useMemo(() => {
     return postedRows.reduce(
       (acc, row) => {
-        acc.reach += getEffectiveMetricValue(row, "reach") || 0;
-        acc.impressions += getEffectiveMetricValue(row, "impressions") || 0;
-        acc.likes += getEffectiveMetricValue(row, "likes") || 0;
-        acc.comments += getEffectiveMetricValue(row, "comments") || 0;
-        acc.shares += getEffectiveMetricValue(row, "shares") || 0;
-        acc.clicks += getEffectiveMetricValue(row, "clicks") || 0;
+        acc.reach += getSavedMetricValue(row, "reach") || 0;
+        acc.impressions += getSavedMetricValue(row, "impressions") || 0;
+        acc.views += getSavedMetricValue(row, "views") || 0;
+        acc.likes += getSavedMetricValue(row, "likes") || 0;
+        acc.comments += getSavedMetricValue(row, "comments") || 0;
+        acc.shares += getSavedMetricValue(row, "shares") || 0;
+        acc.clicks += getSavedMetricValue(row, "clicks") || 0;
         return acc;
       },
-      { reach: 0, impressions: 0, likes: 0, comments: 0, shares: 0, clicks: 0 }
+      { reach: 0, impressions: 0, views: 0, likes: 0, comments: 0, shares: 0, clicks: 0 }
     );
   }, [postedRows]);
 
@@ -2472,7 +3284,7 @@ function PerformanceDashboard({
   const topPost = useMemo(() => {
     return postedRows.reduce((best, row) => {
       if (!best) return row;
-      return getEffectiveRowEngagementTotal(row) > getEffectiveRowEngagementTotal(best) ? row : best;
+      return getSavedRowEngagementTotal(row) > getSavedRowEngagementTotal(best) ? row : best;
     }, null);
   }, [postedRows]);
 
@@ -2482,8 +3294,8 @@ function PerformanceDashboard({
       if (!grouped[row.platform]) {
         grouped[row.platform] = { platform: row.platform, engagement: 0, clicks: 0, posts: 0 };
       }
-      grouped[row.platform].engagement += getEffectiveRowEngagementTotal(row);
-      grouped[row.platform].clicks += getEffectiveMetricValue(row, "clicks") || 0;
+      grouped[row.platform].engagement += getSavedRowEngagementTotal(row);
+      grouped[row.platform].clicks += getSavedMetricValue(row, "clicks") || 0;
       grouped[row.platform].posts += 1;
     });
     return Object.values(grouped).sort((a, b) => b.engagement - a.engagement)[0] || null;
@@ -2491,22 +3303,22 @@ function PerformanceDashboard({
 
   const leaderboard = useMemo(() => {
     return [...postedRows]
-      .sort((a, b) => getEffectiveRowEngagementTotal(b) - getEffectiveRowEngagementTotal(a))
+      .sort((a, b) => getSavedRowEngagementTotal(b) - getSavedRowEngagementTotal(a))
       .slice(0, 4);
   }, [postedRows]);
 
   const monthLabel = formatMonthLabel(monthDate);
   const qualitativeRows = useMemo(
-    () => postedRows.filter((row) => getEffectiveQualitativeNotes(row)),
+    () => postedRows.filter((row) => getSavedQualitativeNotes(row)),
     [postedRows]
   );
   const qualitativeHighlights = useMemo(
-    () => buildQualitativeHighlights(postedRows, monthLabel),
+    () => buildQualitativeHighlights(postedRows, monthLabel, getSavedRowEngagementTotal, getSavedQualitativeNotes),
     [postedRows, monthLabel]
   );
 
   return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
@@ -2577,7 +3389,7 @@ function PerformanceDashboard({
                   className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
                     selectedClientName === client
                       ? "bg-[#13122e] text-white shadow-sm"
-                      : "border border-slate-200 bg-slate-50 text-slate-700"
+                      : "border border-[#ddd4f5] bg-[#f8f5ff] text-[#13122e] hover:bg-[#f0ebfd]"
                   }`}
                 >
                   {client}
@@ -2617,7 +3429,7 @@ function PerformanceDashboard({
                   className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
                     selectedPlatform === platform
                       ? "bg-[#13122e] text-white shadow-sm"
-                      : "border border-slate-200 bg-slate-50 text-slate-700"
+                      : "border border-[#ddd4f5] bg-[#f8f5ff] text-[#13122e] hover:bg-[#f0ebfd]"
                   }`}
                 >
                   {platform}
@@ -2657,7 +3469,7 @@ function PerformanceDashboard({
                   className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
                     selectedCampaign === campaign
                       ? "bg-[#13122e] text-white shadow-sm"
-                      : "border border-slate-200 bg-slate-50 text-slate-700"
+                      : "border border-[#ddd4f5] bg-[#f8f5ff] text-[#13122e] hover:bg-[#f0ebfd]"
                   }`}
                 >
                   {campaign}
@@ -2675,13 +3487,13 @@ function PerformanceDashboard({
             : monthPostedRows.length === 0
             ? `No posted content was found for ${monthLabel}. Change the reporting month or save a posted update with metrics to start building client-friendly reporting.`
             : nearestMetricMonth
-              ? `Posted content exists for ${monthLabel}, but no metrics are attached to those posted items yet. The latest saved metrics are in ${formatMonthLabel(nearestMetricMonth)}. Switch the reporting month or save reach, impressions, likes, comments, shares, or clicks on a posted item in ${monthLabel}.`
-              : `Posted content exists for ${monthLabel}, but no metrics are attached to those posted items yet. Save reach, impressions, likes, comments, shares, or clicks to populate this dashboard.`}
+              ? `Posted content exists for ${monthLabel}, but no metrics are attached to those posted items yet. The latest saved metrics are in ${formatMonthLabel(nearestMetricMonth)}. Switch the reporting month or save reach, impressions, views, likes, comments, shares, or clicks on a posted item in ${monthLabel}.`
+              : `Posted content exists for ${monthLabel}, but no metrics are attached to those posted items yet. Save reach, impressions, views, likes, comments, shares, or clicks to populate this dashboard.`}
         </div>
       ) : (
         <div className="mt-6 space-y-6">
           <div className="grid gap-4 xl:grid-cols-[1.15fr,0.85fr]">
-            <div className="overflow-hidden rounded-[1.75rem] bg-[radial-gradient(circle_at_top_left,_rgba(125,211,252,0.18),_transparent_34%),linear-gradient(135deg,#0f172a,#172554_58%,#1d4ed8)] p-6 text-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_top_left,_rgba(120,85,200,0.35),_transparent_45%),linear-gradient(135deg,#0f0e24_0%,#2d2060_55%,#13122e_100%)] p-6 text-white shadow-[0_8px_32px_rgba(19,18,46,0.24)]">
               <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
                 <div>
                   <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-100">
@@ -2698,9 +3510,9 @@ function PerformanceDashboard({
               <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
                 {[
                   { label: "Reach", value: totals.reach },
+                  { label: "Views", value: totals.views },
                   { label: "Clicks", value: totals.clicks },
                   { label: "Likes", value: totals.likes },
-                  { label: "Shares", value: totals.shares },
                 ].map((item) => (
                   <div key={item.label} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200">{item.label}</div>
@@ -2711,7 +3523,7 @@ function PerformanceDashboard({
             </div>
 
             <div className="grid gap-4">
-              <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+              <div className="rounded-2xl border border-[#ddd4f5] bg-[#f8f5ff] p-5">
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Top Post</div>
                 {topPost ? (
                   <>
@@ -2719,10 +3531,13 @@ function PerformanceDashboard({
                     <p className="mt-1 text-sm text-slate-500">{topPost.platform} · {topPost.clientName}</p>
                     <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
                       <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700">
-                        Reach {formatMetricValue(getEffectiveMetricValue(topPost, "reach"))}
+                        Impressions {formatMetricValue(getSavedMetricValue(topPost, "impressions"))}
+                      </span>
+                      <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-indigo-700">
+                        Views {formatMetricValue(getSavedMetricValue(topPost, "views"))}
                       </span>
                       <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
-                        Engagement {formatMetricValue(getEffectiveRowEngagementTotal(topPost))}
+                        Engagement {formatMetricValue(getSavedRowEngagementTotal(topPost))}
                       </span>
                     </div>
                   </>
@@ -2731,7 +3546,7 @@ function PerformanceDashboard({
                 )}
               </div>
 
-              <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+              <div className="rounded-2xl border border-[#ddd4f5] bg-[#f8f5ff] p-5">
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Strongest Platform</div>
                 {topPlatform ? (
                   <>
@@ -2754,42 +3569,42 @@ function PerformanceDashboard({
             {[
               { label: "Impressions", value: totals.impressions },
               { label: "Reach", value: totals.reach },
+              { label: "Views", value: totals.views },
               { label: "Engagement", value: engagementTotal },
               { label: "Clicks", value: totals.clicks },
               { label: "Comments", value: totals.comments },
-              { label: "Shares", value: totals.shares },
             ].map((item) => (
-              <div key={item.label} className="rounded-xl border border-[#ddd4f5] bg-slate-50 px-4 py-4">
+              <div key={item.label} className="rounded-xl border border-[#ddd4f5] bg-[#f8f5ff] px-4 py-4">
                 <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
                 <div className="mt-3 text-3xl font-semibold text-slate-900">{formatMetricValue(item.value)}</div>
               </div>
             ))}
           </div>
 
-          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+          <div className="rounded-2xl border border-[#ddd4f5] bg-[#f8f5ff] p-5">
             <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
               <div>
                 <h4 className="text-lg font-semibold text-slate-900">Monthly Summary</h4>
                 <p className="mt-1 text-sm text-slate-500">A client-friendly summary generated from the current month’s posted content.</p>
               </div>
-              <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+              <div className="rounded-full bg-[#f0ebfd] px-3 py-1 text-xs font-semibold text-[#7855c8]">
                 Ready for reporting
               </div>
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-3">
-              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="rounded-xl border border-[#e8e3f5] bg-white p-5">
                 <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Delivery</div>
                 <p className="mt-3 text-sm leading-7 text-slate-700">
-                  {postedRows.length} post{postedRows.length === 1 ? "" : "s"} went live in {monthLabel}, generating {formatMetricValue(totals.impressions)} impressions and {formatMetricValue(totals.reach)} reach.
+                  {postedRows.length} post{postedRows.length === 1 ? "" : "s"} went live in {monthLabel}, generating {formatMetricValue(totals.impressions)} impressions, {formatMetricValue(totals.reach)} reach, and {formatMetricValue(totals.views)} views.
                 </p>
               </div>
-              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="rounded-xl border border-[#e8e3f5] bg-white p-5">
                 <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Audience Response</div>
                 <p className="mt-3 text-sm leading-7 text-slate-700">
                   Engagement reached {formatMetricValue(engagementTotal)} across likes, comments, and shares, with an average of {formatMetricValue(averageEngagement)} per posted item.
                 </p>
               </div>
-              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="rounded-xl border border-[#e8e3f5] bg-white p-5">
                 <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Standout Insight</div>
                 <p className="mt-3 text-sm leading-7 text-slate-700">
                   {topPlatform
@@ -2800,19 +3615,19 @@ function PerformanceDashboard({
             </div>
           </div>
 
-          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+          <div className="rounded-2xl border border-[#ddd4f5] bg-[#f8f5ff] p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h4 className="text-lg font-semibold text-slate-900">Top Content This Month</h4>
                 <p className="mt-1 text-sm text-slate-500">A simple leaderboard to support client reporting and next-step decisions.</p>
               </div>
-              <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+              <div className="rounded-full bg-[#f0ebfd] px-3 py-1 text-xs font-semibold text-[#7855c8]">
                 {leaderboard.length} Highlight{leaderboard.length === 1 ? "" : "s"}
               </div>
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-2">
               {leaderboard.map((row, index) => (
-                <div key={row.id} className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div key={row.id} className="rounded-xl border border-[#e8e3f5] bg-white p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
@@ -2822,17 +3637,17 @@ function PerformanceDashboard({
                       <p className="mt-1 text-sm text-slate-500">{row.platform} · {row.clientName}</p>
                     </div>
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                      {formatMetricValue(getEffectiveRowEngagementTotal(row))} engagement
+                      {formatMetricValue(getSavedRowEngagementTotal(row))} engagement
                     </span>
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                    <div className="rounded-xl bg-[#f8f5ff] px-4 py-3">
                       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Impressions</div>
-                    <div className="mt-2 text-xl font-bold text-[#13122e]">{formatMetricValue(getEffectiveMetricValue(row, "impressions"))}</div>
+                      <div className="mt-2 text-xl font-bold text-[#13122e]">{formatMetricValue(getSavedMetricValue(row, "impressions"))}</div>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Clicks</div>
-                      <div className="mt-2 text-xl font-bold text-[#13122e]">{formatMetricValue(getEffectiveMetricValue(row, "clicks"))}</div>
+                    <div className="rounded-xl bg-[#f8f5ff] px-4 py-3">
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Views</div>
+                      <div className="mt-2 text-xl font-bold text-[#13122e]">{formatMetricValue(getSavedMetricValue(row, "views"))}</div>
                     </div>
                   </div>
                 </div>
@@ -2840,50 +3655,50 @@ function PerformanceDashboard({
             </div>
           </div>
 
-          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+          <div className="rounded-2xl border border-[#ddd4f5] bg-[#f8f5ff] p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h4 className="text-lg font-semibold text-slate-900">Narrative Insights</h4>
                 <p className="mt-1 text-sm text-slate-500">Qualitative observations captured with the performance metrics for richer client reporting.</p>
               </div>
-              <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+              <div className="rounded-full bg-[#f0ebfd] px-3 py-1 text-xs font-semibold text-[#7855c8]">
                 {qualitativeRows.length} note{qualitativeRows.length === 1 ? "" : "s"}
               </div>
             </div>
             {qualitativeRows.length === 0 ? (
-              <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">
+              <div className="mt-4 rounded-2xl border border-dashed border-[#ddd4f5] bg-[#faf8ff] p-5 text-sm text-slate-500">
                 No qualitative performance notes have been captured for this selection yet.
               </div>
             ) : (
               <div className="mt-4 grid gap-4 xl:grid-cols-2">
                 {qualitativeRows.slice(0, 4).map((row) => (
-                  <div key={`${row.id}-qual`} className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div key={`${row.id}-qual`} className="rounded-xl border border-[#e8e3f5] bg-white p-5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">{row.clientName}</span>
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">{row.platform}</span>
-                      {row.campaign && <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">{row.campaign}</span>}
+                      <span className="rounded-full border border-[#ddd4f5] bg-[#f0ebfd] px-3 py-1 text-xs font-semibold text-[#5b4a88]">{row.clientName}</span>
+                      <span className="rounded-full border border-[#ddd4f5] bg-[#f0ebfd] px-3 py-1 text-xs font-semibold text-[#5b4a88]">{row.platform}</span>
+                      {row.campaign && <span className="rounded-full border border-[#ddd4f5] bg-[#f0ebfd] px-3 py-1 text-xs font-semibold text-[#5b4a88]">{row.campaign}</span>}
                     </div>
                     <h5 className="mt-3 text-base font-semibold text-slate-900">{row.topic || "Planned Post"}</h5>
-                    <p className="mt-3 text-sm leading-7 text-slate-700">{getEffectiveQualitativeNotes(row)}</p>
+                    <p className="mt-3 text-sm leading-7 text-slate-700">{getSavedQualitativeNotes(row)}</p>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+          <div className="rounded-2xl border border-[#ddd4f5] bg-[#f8f5ff] p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h4 className="text-lg font-semibold text-slate-900">Insight Readout</h4>
                 <p className="mt-1 text-sm text-slate-500">A concise interpretation layer built from the posted metrics and qualitative notes in this selection.</p>
               </div>
-              <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+              <div className="rounded-full bg-[#f0ebfd] px-3 py-1 text-xs font-semibold text-[#7855c8]">
                 {qualitativeHighlights.length} cues
               </div>
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-3">
               {qualitativeHighlights.map((item) => (
-                <div key={item.label} className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div key={item.label} className="rounded-xl border border-[#e8e3f5] bg-white p-5">
                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
                   <p className="mt-3 text-sm leading-7 text-slate-700">{item.body}</p>
                 </div>
@@ -2904,7 +3719,7 @@ function PlannedPostsPanel({ rows }) {
           <h3 className="text-xl font-bold text-[#13122e]">Planned Posts</h3>
           <p className="text-sm text-slate-500">Frontend view of all planned content. This is read-only and meant for quick review.</p>
         </div>
-        <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{rows.length} Posts</div>
+        <div className="rounded-full bg-[#f0ebfd] px-4 py-2 text-sm font-semibold text-[#7855c8]">{rows.length} Posts</div>
       </div>
 
       {rows.length === 0 ? (
@@ -2918,7 +3733,7 @@ function PlannedPostsPanel({ rows }) {
                   <div className="text-sm font-semibold text-slate-900">{plan.topic}</div>
                   <div className="mt-1 text-xs text-slate-500">{plan.clientName}</div>
                 </div>
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">{plan.platform}</span>
+                <span className="rounded-full border border-[#ddd4f5] bg-[#f8f5ff] px-3 py-1 text-xs font-semibold text-[#13122e]">{plan.platform}</span>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-600">
                 <div><div className="text-xs uppercase tracking-wide text-slate-400">Date</div><div className="mt-1 font-medium text-slate-800">{formatDateLabel(plan.date)}</div></div>
@@ -2950,6 +3765,10 @@ function PlannedContentTable({
   onGoToCurrentMonth,
   onDraftChange,
   onProtectedDraftChange,
+  metricReviewDrafts = {},
+  onFetchMetricReview,
+  onApproveMetricReview,
+  onRejectMetricReview,
   onSaveUpdate,
   onEdit,
   onDelete,
@@ -3003,7 +3822,7 @@ function PlannedContentTable({
           <h3 className="text-xl font-bold text-[#13122e]">Logged For Update</h3>
           <p className="text-sm text-slate-500">Review planned items that are now ready for live execution updates, metrics, links, and qualitative reporting notes.</p>
         </div>
-        <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{filteredRows.length} Planned</div>
+        <div className="rounded-full bg-[#f0ebfd] px-4 py-2 text-sm font-semibold text-[#7855c8]">{filteredRows.length} Planned</div>
       </div>
       {monthDate && (
         <div className="mb-5 rounded-xl border border-[#e8e3f5] bg-[#f8f5ff] p-4">
@@ -3067,7 +3886,7 @@ function PlannedContentTable({
             className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
               selectedClient === client
                 ? "bg-[#13122e] text-white"
-                : "border border-slate-200 bg-white text-slate-700"
+                : "border border-[#ddd4f5] bg-white text-[#13122e] hover:bg-[#f8f5ff]"
             }`}
           >
             {client}
@@ -3094,7 +3913,7 @@ function PlannedContentTable({
             className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
               selectedPlatform === platform
                 ? "bg-[#13122e] text-white"
-                : "border border-slate-200 bg-white text-slate-700"
+                : "border border-[#ddd4f5] bg-white text-[#13122e] hover:bg-[#f8f5ff]"
             }`}
           >
             {platform}
@@ -3110,8 +3929,11 @@ function PlannedContentTable({
           </div>
         ) : filteredRows.map((plan) => {
           const isExpanded = expandedPlanId === plan.id;
+          const postLinkState = getPostLinkValidationState(plan.draftPostLink);
+          const metricReview = metricReviewDrafts[getPlanKey(plan)] || createNoFetchMetricReview();
+          const canFetchDemoMetrics = postLinkState.hasValue && postLinkState.isValid && postLinkState.platform === "youtube";
           return (
-            <div key={plan.id} className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 shadow-sm">
+            <div key={plan.id} className="rounded-2xl border border-[#ddd4f5] bg-[#f8f5ff] p-5 shadow-sm">
               <button
                 type="button"
                 onClick={() => setExpandedPlanId((prev) => prev === plan.id ? null : plan.id)}
@@ -3122,21 +3944,21 @@ function PlannedContentTable({
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
                     <span>{plan.clientName} · {plan.platform}</span>
                     {plan.campaign && (
-                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                      <span className="rounded-full border border-[#ddd4f5] bg-[#f8f5ff] px-3 py-1 text-xs font-semibold text-[#13122e]">
                         Campaign: {plan.campaign}
                       </span>
                     )}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                  <span className="rounded-full border border-[#ddd4f5] bg-[#f8f5ff] px-3 py-1 text-xs font-semibold text-[#13122e]">
                     {formatDateLabel(plan.date)}
                   </span>
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                  <span className="rounded-full border border-[#ddd4f5] bg-[#f8f5ff] px-3 py-1 text-xs font-semibold text-[#13122e]">
                     {plan.format || "No format"}
                   </span>
                   {plan.currentStatus === "-" ? (
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
+                    <span className="rounded-full border border-[#ddd4f5] bg-[#f8f5ff] px-3 py-1 text-xs font-semibold text-slate-500">
                       Planned
                     </span>
                   ) : (
@@ -3144,14 +3966,14 @@ function PlannedContentTable({
                       {plan.currentStatus}
                     </span>
                   )}
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                  <span className="rounded-full border border-[#ddd4f5] bg-[#f8f5ff] px-3 py-1 text-xs font-semibold text-[#13122e]">
                     {isExpanded ? "Collapse" : "Expand"}
                   </span>
                 </div>
               </button>
 
               {isExpanded && (
-              <div className="mt-4 grid gap-4 border-t border-slate-200 pt-4 xl:grid-cols-[0.8fr,1.2fr]">
+              <div className="mt-4 grid gap-4 border-t border-[#ddd4f5] pt-4 xl:grid-cols-[0.8fr,1.2fr]">
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-2xl bg-white p-4">
@@ -3176,11 +3998,11 @@ function PlannedContentTable({
                   </div>
                 </div>
 
-                <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4">
+                <div className="rounded-xl border border-[#e8e3f5] bg-white p-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Update Status</label>
-                      <select value={plan.draftStatus} onChange={(e) => onDraftChange(plan, "status", e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm">
+                      <select value={plan.draftStatus} onChange={(e) => onDraftChange(plan, "status", e.target.value)} className="w-full rounded-xl border border-[#ddd4f5] bg-[#faf8ff] px-3 py-3 text-sm">
                         <option value="">Select status</option>
                         {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
                       </select>
@@ -3191,14 +4013,44 @@ function PlannedContentTable({
                         value={plan.draftPostLink}
                         onChange={(e) => onProtectedDraftChange(plan, "postLink", e.target.value)}
                         placeholder="Paste URL"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm"
+                        className="w-full rounded-xl border border-[#ddd4f5] bg-[#faf8ff] px-3 py-3 text-sm"
                       />
+                      <div className="mt-2 rounded-xl border border-[#e8e3f5] bg-[#faf8ff] px-3 py-2.5 text-xs">
+                        {!postLinkState.hasValue ? (
+                          <p className="text-slate-500">Supported detection: {postLinkState.supportedLabels}</p>
+                        ) : postLinkState.isValid ? (
+                          <div className="space-y-1 text-slate-600">
+                            <p>
+                              <span className="font-semibold text-slate-900">Detected:</span>{" "}
+                              {postLinkState.platformLabel}
+                              {postLinkState.matchType ? ` (${postLinkState.matchType})` : ""}
+                            </p>
+                            <p>
+                              <span className="font-semibold text-slate-900">Post ID:</span>{" "}
+                              {postLinkState.providerPostId}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-amber-700">{postLinkState.errorMessage}</p>
+                        )}
+                      </div>
+                      <div className="mt-3">
+                        <FetchedMetricsReviewPanel
+                          plan={plan}
+                          review={metricReview}
+                          canFetchDemoMetrics={canFetchDemoMetrics}
+                          onFetch={() => onFetchMetricReview(plan)}
+                          onApprove={() => onApproveMetricReview(plan)}
+                          onReject={() => onRejectMetricReview(plan)}
+                          busy={busy}
+                        />
+                      </div>
                     </div>
                   </div>
 
                   <div className="mt-4">
                     <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Update Notes</label>
-                    <textarea value={plan.draftNotes} onChange={(e) => onDraftChange(plan, "notes", e.target.value)} rows={3} placeholder="Add update notes" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm" />
+                    <textarea value={plan.draftNotes} onChange={(e) => onDraftChange(plan, "notes", e.target.value)} rows={3} placeholder="Add update notes" className="w-full rounded-xl border border-[#ddd4f5] bg-[#faf8ff] px-3 py-3 text-sm" />
                   </div>
 
                   <div className="mt-4">
@@ -3208,7 +4060,7 @@ function PlannedContentTable({
                       onChange={(e) => onDraftChange(plan, "qualitativeNotes", e.target.value)}
                       rows={3}
                       placeholder="Add audience reactions, brand sentiment, creative learnings, or qualitative observations"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm"
+                      className="w-full rounded-xl border border-[#ddd4f5] bg-[#faf8ff] px-3 py-3 text-sm"
                     />
                   </div>
 
@@ -3221,6 +4073,7 @@ function PlannedContentTable({
                       {[
                         ["reach", "Reach"],
                         ["impressions", "Impressions"],
+                        ["views", "Views"],
                         ["likes", "Likes"],
                         ["comments", "Comments"],
                         ["shares", "Shares"],
@@ -3234,7 +4087,7 @@ function PlannedContentTable({
                             value={plan[`draft${field.charAt(0).toUpperCase()}${field.slice(1)}`] ?? ""}
                             onChange={(e) => onProtectedDraftChange(plan, field, e.target.value)}
                             placeholder={label}
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm"
+                            className="w-full rounded-xl border border-[#ddd4f5] bg-[#f0ebfd]/60 px-3 py-3 text-sm cursor-not-allowed text-slate-500"
                           />
                         </div>
                       ))}
@@ -3242,9 +4095,9 @@ function PlannedContentTable({
                   </div>
 
                   <div className="mt-5 flex flex-wrap gap-2">
-                    <button type="button" disabled={busy} onClick={() => onSaveUpdate(plan)} className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">Save Update</button>
-                    <button type="button" disabled={busy} onClick={() => onEdit(plan.id)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">Edit</button>
-                    <button type="button" disabled={busy} onClick={() => onDelete(plan.id)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">Delete</button>
+                    <button type="button" disabled={busy} onClick={() => onSaveUpdate(plan)} className="rounded-xl bg-[#7855c8] px-4 py-3 text-sm font-semibold text-white hover:bg-[#6644b8] transition-colors disabled:cursor-not-allowed disabled:opacity-60">Save Update</button>
+                    <button type="button" disabled={busy} onClick={() => onEdit(plan.id)} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-3 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors disabled:cursor-not-allowed disabled:opacity-60">Edit</button>
+                    <button type="button" disabled={busy} onClick={() => onDelete(plan.id)} className="rounded-xl border border-[#ddd4f5] bg-white px-4 py-3 text-sm font-semibold text-[#13122e] hover:bg-[#f8f5ff] transition-colors disabled:cursor-not-allowed disabled:opacity-60">Delete</button>
                   </div>
                 </div>
               </div>
@@ -3265,7 +4118,7 @@ function ExecutionStatusTable({ rows }) {
           <h3 className="text-xl font-bold text-[#13122e]">Execution Status Log</h3>
           <p className="text-sm text-slate-500">Only saved updates from the planned content log appear here.</p>
         </div>
-        <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">{rows.length} Updates</div>
+        <div className="rounded-full bg-[#f0ebfd] px-4 py-2 text-sm font-semibold text-[#7855c8]">{rows.length} Updates</div>
       </div>
       <div className="space-y-4 md:hidden">
         {rows.length === 0 ? (
@@ -3289,6 +4142,7 @@ function ExecutionStatusTable({ rows }) {
             {hasPerformanceMetrics(record) && (
               <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
                 <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[#13122e]">Impressions {formatMetricValue(record.impressions)}</span>
+                <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[#13122e]">Views {formatMetricValue(record.views)}</span>
                 <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[#13122e]">Engagement {formatMetricValue(getEngagementTotal(record))}</span>
                 <span className="rounded-lg border border-[#ddd4f5] bg-[#f8f5ff] px-2.5 py-1 text-[#13122e]">Clicks {formatMetricValue(record.clicks)}</span>
               </div>
@@ -3307,7 +4161,7 @@ function ExecutionStatusTable({ rows }) {
           <thead><tr className="text-left"><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Date</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Platform</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Topic</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Status</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Time</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Performance</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Link</th><th className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Notes</th></tr></thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr className="bg-slate-50"><td colSpan={8} className="rounded-2xl px-4 py-8 text-center text-sm text-slate-500">No execution updates yet. Saved updates from the planned log will appear here.</td></tr>
+              <tr className="bg-[#faf8ff]"><td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">No execution updates yet. Saved updates from the planned log will appear here.</td></tr>
             ) : rows.map((record) => (
               <tr key={record.id} className="bg-[#faf8ff]">
                 <td className="rounded-l-xl px-4 py-3.5 text-xs font-semibold text-[#13122e]">{formatDateLabel(record.date)}</td>
@@ -3319,6 +4173,7 @@ function ExecutionStatusTable({ rows }) {
                   {hasPerformanceMetrics(record) ? (
                     <div className="space-y-0.5 text-[11px] font-semibold text-slate-700">
                       <div>Imp {formatMetricValue(record.impressions)}</div>
+                      <div>View {formatMetricValue(record.views)}</div>
                       <div>Eng {formatMetricValue(getEngagementTotal(record))}</div>
                       <div>Clk {formatMetricValue(record.clicks)}</div>
                     </div>
@@ -3411,7 +4266,7 @@ function SnapshotPanel({
     : [];
 
   return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-[#ddd4f5] bg-white p-6 shadow-[0_2px_4px_rgba(19,18,46,0.04),0_8px_24px_rgba(19,18,46,0.06)]">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
@@ -3495,7 +4350,7 @@ function SnapshotPanel({
             </div>
             <div className="flex flex-wrap gap-2">
               {scopeLabels.map((label) => (
-                <span key={label} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
+                <span key={label} className="rounded-full border border-[#ddd4f5] bg-[#f8f5ff] px-4 py-2 text-sm font-semibold text-[#13122e]">
                   {label}
                 </span>
               ))}
@@ -3511,7 +4366,7 @@ function SnapshotPanel({
       ) : (
         <div className="mt-6 space-y-6">
           <div className="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
-            <div className="overflow-hidden rounded-[1.75rem] bg-[radial-gradient(circle_at_top_left,_rgba(148,163,184,0.26),_transparent_38%),linear-gradient(135deg,#0f172a,#1e293b_58%,#334155)] p-6 text-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_top_left,_rgba(120,85,200,0.28),_transparent_42%),linear-gradient(135deg,#0f0e24_0%,#1e1a40_55%,#2d2060_100%)] p-6 text-white shadow-[0_8px_32px_rgba(19,18,46,0.24)]">
               <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
                 <div>
                   <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200">
@@ -3556,7 +4411,7 @@ function SnapshotPanel({
               </div>
             </div>
 
-            <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+            <div className="rounded-2xl border border-[#ddd4f5] bg-[#f8f5ff] p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h4 className="text-lg font-semibold text-slate-900">Available Periods</h4>
@@ -3564,7 +4419,7 @@ function SnapshotPanel({
                     Click a period to refresh the dashboard focus.
                   </p>
                 </div>
-                <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                <div className="rounded-full bg-[#f0ebfd] px-3 py-1 text-xs font-semibold text-[#7855c8]">
                   {activeSummary.length} Periods
                 </div>
               </div>
@@ -3578,8 +4433,8 @@ function SnapshotPanel({
                       onClick={() => setSelectedPeriod(periodItem.period)}
                       className={`w-full rounded-2xl border p-4 text-left transition ${
                         isActive
-                          ? "border-slate-900 bg-[#13122e] text-white shadow-sm"
-                          : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-slate-300"
+                          ? "border-[#13122e] bg-[#13122e] text-white shadow-[0_2px_8px_rgba(19,18,46,0.2)]"
+                          : "border-[#ddd4f5] bg-white hover:-translate-y-0.5 hover:border-[#7855c8]/30 hover:shadow-[0_2px_8px_rgba(120,85,200,0.08)]"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -3592,14 +4447,14 @@ function SnapshotPanel({
                           </div>
                         </div>
                         <div className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          isActive ? "bg-white/10 text-white" : "bg-slate-100 text-slate-700"
+                          isActive ? "bg-white/10 text-white" : "bg-[#f0ebfd] text-[#7855c8]"
                         }`}>
                           {periodItem.executionScore}%
                         </div>
                       </div>
-                      <div className={`mt-3 h-2 overflow-hidden rounded-full ${isActive ? "bg-white/10" : "bg-slate-100"}`}>
+                      <div className={`mt-3 h-2 overflow-hidden rounded-full ${isActive ? "bg-white/10" : "bg-[#ede8fa]"}`}>
                         <div
-                          className={`h-full rounded-full ${isActive ? "bg-emerald-300" : "bg-slate-900"}`}
+                          className={`h-full rounded-full ${isActive ? "bg-[#b8a8e8]" : "bg-[#7855c8]"}`}
                           style={{ width: `${periodItem.executionScore}%` }}
                         />
                       </div>
@@ -3619,7 +4474,7 @@ function SnapshotPanel({
             ))}
           </div>
 
-          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+          <div className="rounded-2xl border border-[#ddd4f5] bg-[#f8f5ff] p-5">
             <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
               <div>
                 <h4 className="text-lg font-semibold text-slate-900">Platform Performance</h4>
@@ -3627,7 +4482,7 @@ function SnapshotPanel({
                   A tidier platform-by-platform view for the selected period.
                 </p>
               </div>
-              <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+              <div className="rounded-full bg-[#f0ebfd] px-3 py-1 text-xs font-semibold text-[#7855c8]">
                 {platformCards.length} Platforms
               </div>
             </div>
@@ -3636,7 +4491,7 @@ function SnapshotPanel({
               {platformCards.map((platformItem) => (
                 <div
                   key={`${featuredPeriod.period}-${platformItem.platform}`}
-                  className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm"
+                  className="rounded-xl border border-[#e8e3f5] bg-white p-5"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -3645,8 +4500,8 @@ function SnapshotPanel({
                         {platformItem.posted} posted from {platformItem.planned} planned entries
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-slate-900 px-4 py-2 text-right text-white">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+                    <div className="rounded-2xl bg-[#13122e] px-4 py-2 text-right text-white">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#b8a8e8]">
                         Score
                       </div>
                       <div className="mt-1 text-2xl font-semibold">{platformItem.executionScore}%</div>
@@ -3658,9 +4513,9 @@ function SnapshotPanel({
                       <span>Posting Pace</span>
                       <span>{platformItem.posted}/{platformItem.planned || 0}</span>
                     </div>
-                    <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                    <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[#ede8fa]">
                       <div
-                        className="h-full rounded-full bg-slate-900 transition-all"
+                        className="h-full rounded-full bg-[#7855c8] transition-all"
                         style={{ width: `${platformItem.executionScore}%` }}
                       />
                     </div>
@@ -3696,7 +4551,7 @@ function SnapshotPanel({
   );
 }
 
-function ClientSocialMediaPostingTrackerInterface() {
+export default function ClientSocialMediaPostingTrackerInterface() {
   const initialDataMonth = getMonthStart(new Date());
   const [planForm, setPlanForm] = useState({
     ...EMPTY_PLAN_FORM,
@@ -3713,6 +4568,7 @@ function ClientSocialMediaPostingTrackerInterface() {
   const [editingPlanId, setEditingPlanId] = useState(null);
   const [snapshotView, setSnapshotView] = useState("weekly");
   const [statusDrafts, setStatusDrafts] = useState(() => readStoredObject(STATUS_DRAFTS_STORAGE_KEY, {}));
+  const [metricReviewDrafts, setMetricReviewDrafts] = useState(() => readStoredObject(AUTO_SYNC_REVIEW_STORAGE_KEY, {}));
   const [protectedDraftEdits, setProtectedDraftEdits] = useState({});
   const [notice, setNotice] = useState("Ready for deployment.");
   const [isClientView, setIsClientView] = useState(false);
@@ -3734,15 +4590,34 @@ function ClientSocialMediaPostingTrackerInterface() {
     notes: item.notes || "",
     createdAt: item.createdAt || "",
   })));
+  const [metaAccounts, setMetaAccounts] = useState(() => readStoredItems(META_ACCOUNTS_STORAGE_KEY, []).map(mapDbMetaAccount));
+  const [metaConnections, setMetaConnections] = useState(() => readStoredItems(META_CONNECTIONS_STORAGE_KEY, []).map((item) => ({
+    id: item.id || createId("meta-connection"),
+    accountId: item.accountId || "",
+    clientId: item.clientId || "",
+    clientName: item.clientName || "",
+    connectionStatus: item.connectionStatus || "active",
+    deactivatedAt: item.deactivatedAt || "",
+    createdAt: item.createdAt || "",
+    updatedAt: item.updatedAt || "",
+  })));
   const [clientForm, setClientForm] = useState(EMPTY_CLIENT_FORM);
   const [clientBusy, setClientBusy] = useState(false);
   const [editingClientId, setEditingClientId] = useState(null);
+  const [metaAccountForm, setMetaAccountForm] = useState(EMPTY_META_ACCOUNT_FORM);
+  const [metaConnectionForm, setMetaConnectionForm] = useState(EMPTY_META_CONNECTION_FORM);
+  const [metaBusy, setMetaBusy] = useState(false);
+  const [editingMetaAccountId, setEditingMetaAccountId] = useState(null);
+  const [editingMetaConnectionId, setEditingMetaConnectionId] = useState(null);
+  const [metaSchemaVariantId, setMetaSchemaVariantId] = useState(null);
   const [selectedCalendarPost, setSelectedCalendarPost] = useState(null);
   const [selectedCalendarOverflow, setSelectedCalendarOverflow] = useState(null);
   const [clientDashboardView, setClientDashboardView] = useState("performance");
   const [adminWorkspace, setAdminWorkspace] = useState("dashboard");
   const [adminDashboardView, setAdminDashboardView] = useState("performance");
 
+  const trackerConfigIssue = getTrackerConfigIssue();
+  const trackerConfigNotice = getTrackerConfigNotice(trackerConfigIssue);
   const sharedModeReady = hasSharedConfiguration();
   const supabase = useMemo(() => getSupabaseClient(), [sharedModeReady]);
 
@@ -3762,9 +4637,36 @@ function ClientSocialMediaPostingTrackerInterface() {
   }, [statusDrafts]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(AUTO_SYNC_REVIEW_STORAGE_KEY, JSON.stringify(metricReviewDrafts));
+  }, [metricReviewDrafts]);
+
+  useEffect(() => {
     if (typeof window === "undefined" || sharedModeReady) return;
     window.localStorage.setItem(CLIENT_DIRECTORY_STORAGE_KEY, JSON.stringify(managedClients));
   }, [managedClients, sharedModeReady]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || sharedModeReady) return;
+    window.localStorage.setItem(META_ACCOUNTS_STORAGE_KEY, JSON.stringify(metaAccounts));
+  }, [metaAccounts, sharedModeReady]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || sharedModeReady) return;
+    window.localStorage.setItem(META_CONNECTIONS_STORAGE_KEY, JSON.stringify(metaConnections));
+  }, [metaConnections, sharedModeReady]);
+
+  useEffect(() => {
+    if (!sharedModeReady || !currentUser || currentUser.mode === "shared") return;
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+    setCurrentUser(null);
+    setIsClientView(false);
+    setSelectedClientName("All Clients");
+    setProtectedDraftEdits({});
+    setAuthNotice("Shared mode is now enabled. Sign in with an invited email to enter the hosted workspace.");
+  }, [sharedModeReady, currentUser]);
 
   const shouldHideLegacyDemoClients = currentUser?.mode === "shared" || managedClients.length > 0;
   const visiblePlans = useMemo(
@@ -3787,6 +4689,10 @@ function ClientSocialMediaPostingTrackerInterface() {
     () => getManagedClientNames(visibleManagedClients),
     [visibleManagedClients]
   );
+  const enrichedMetaConnections = useMemo(
+    () => enrichMetaConnections(metaAccounts, metaConnections),
+    [metaAccounts, metaConnections]
+  );
 
   useEffect(() => {
     if (!currentUser) return;
@@ -3802,6 +4708,31 @@ function ClientSocialMediaPostingTrackerInterface() {
       setSelectedClientName("All Clients");
     }
   }, [currentUser, accessibleClientNames, selectedClientName]);
+
+  async function loadRemoteMetaData(user, clientRows = []) {
+    if (!supabase || !user || user.role === "client") {
+      setMetaAccounts([]);
+      setMetaConnections([]);
+      return;
+    }
+
+    const variant = await resolveMetaSchemaVariant();
+    const clientNameById = Object.fromEntries((clientRows || []).map((client) => [client.id, client.name]));
+    const [
+      { data: accountRows, error: accountError },
+      { data: connectionRows, error: connectionError },
+    ] = await Promise.all([
+      supabase.from(variant.accountsTable).select("*").order("created_at", { ascending: false }),
+      supabase.from(variant.connectionsTable).select("*").order("created_at", { ascending: false }),
+    ]);
+
+    if (accountError) throw accountError;
+    if (connectionError) throw connectionError;
+
+    setMetaSchemaVariantId(variant.id);
+    setMetaAccounts((accountRows || []).map(mapDbMetaAccount));
+    setMetaConnections((connectionRows || []).map((row) => mapDbMetaConnection(row, clientNameById)));
+  }
 
   async function loadRemoteSession() {
     if (!supabase) return;
@@ -3841,11 +4772,20 @@ function ClientSocialMediaPostingTrackerInterface() {
       return;
     }
 
+    const resolvedClientName = resolvedProfile.client_name || "";
+    if (resolvedProfile.role === "client" && parseClientScopeList(resolvedClientName).length === 0) {
+      await supabase.auth.signOut();
+      setCurrentUser(null);
+      setAuthNotice("This client account is missing a brand scope. Ask an admin to update invited access.");
+      setSyncState("error");
+      return;
+    }
+
     setCurrentUser({
       id: resolvedProfile.id,
       name: resolvedProfile.full_name || sessionUser.email || "Team Member",
       role: resolvedProfile.role,
-      clientName: resolvedProfile.client_name || "",
+      clientName: resolvedClientName,
       email: sessionUser.email || "",
       mode: "shared",
     });
@@ -3853,6 +4793,7 @@ function ClientSocialMediaPostingTrackerInterface() {
     setSyncState("connected");
     setReportingMonthPinned(false);
     setActiveDataMonth(getMonthStart(new Date()));
+    setCalendarMonth(getMonthStart(new Date()));
   }
 
   async function loadRemoteData(user) {
@@ -3865,44 +4806,37 @@ function ClientSocialMediaPostingTrackerInterface() {
         .select("id, client_name, campaign, date, platform, topic, format, time, notes")
         .order("date", { ascending: true });
 
-      let statusQuery = supabase
-        .from("status_records")
-        .select("id, plan_id, client_name, campaign, date, platform, topic, format, time, status, post_link, notes, qualitative_notes, reach, impressions, likes, comments, shares, clicks")
-        .order("date", { ascending: true });
-
       if (user.role === "client" && user.clientName) {
         const clientScopes = parseClientScopeList(user.clientName);
         if (clientScopes.length === 1) {
           planQuery = planQuery.eq("client_name", clientScopes[0]);
-          statusQuery = statusQuery.eq("client_name", clientScopes[0]);
         } else if (clientScopes.length > 1) {
           planQuery = planQuery.in("client_name", clientScopes);
-          statusQuery = statusQuery.in("client_name", clientScopes);
         }
       }
 
-      const remoteRequests = [planQuery, statusQuery];
-
-      if (user.role === "admin") {
-        remoteRequests.push(
-          supabase
+      const emptyRemoteResult = Promise.resolve({ data: [], error: null });
+      const [
+        { data: planRows, error: plansError },
+        { data: statusRows, error: statusError },
+        inviteResult,
+        clientResult,
+      ] = await Promise.all([
+        planQuery,
+        loadStatusRowsWithViewsSupport(supabase, user),
+        user.role === "admin"
+          ? supabase
             .from("access_invites")
             .select("email, full_name, role, client_name, created_at")
             .order("created_at", { ascending: false })
-        );
-      }
-
-      if (canEdit(user)) {
-        remoteRequests.push(
-          supabase
+          : emptyRemoteResult,
+        canEdit(user)
+          ? supabase
             .from("client_directory")
             .select("id, name, notes, created_at")
             .order("name", { ascending: true })
-        );
-      }
-
-      const remoteResults = await Promise.all(remoteRequests);
-      const [{ data: planRows, error: plansError }, { data: statusRows, error: statusError }, inviteResult, clientResult] = remoteResults;
+          : emptyRemoteResult,
+      ]);
 
       if (plansError) throw plansError;
       if (statusError) throw statusError;
@@ -3916,9 +4850,14 @@ function ClientSocialMediaPostingTrackerInterface() {
         setAccessInvites([]);
       }
       if (canEdit(user)) {
-        const effectiveClientResult = user.role === "admin" ? clientResult : inviteResult;
+        const effectiveClientResult = clientResult;
         if (effectiveClientResult?.error) throw effectiveClientResult.error;
-        setManagedClients((effectiveClientResult?.data || []).map(mapDbClient));
+        const nextClients = (effectiveClientResult?.data || []).map(mapDbClient);
+        setManagedClients(nextClients);
+        await loadRemoteMetaData(user, nextClients);
+      } else {
+        setMetaAccounts([]);
+        setMetaConnections([]);
       }
       setSyncState("connected");
     } catch (error) {
@@ -3949,6 +4888,14 @@ function ClientSocialMediaPostingTrackerInterface() {
       loadRemoteData(currentUser);
     }
   }, [sharedModeReady, currentUser]);
+
+  useEffect(() => {
+    const calendarVisible = isClientView
+      ? clientDashboardView === "calendar"
+      : adminWorkspace === "calendar";
+    if (calendarVisible) return;
+    setCalendarMonth((prev) => (isSameMonth(prev, activeDataMonth) ? prev : getMonthStart(activeDataMonth)));
+  }, [activeDataMonth, adminWorkspace, clientDashboardView, isClientView]);
 
   const filteredPlans = useMemo(() => {
     if (!currentUser) return [];
@@ -3990,6 +4937,37 @@ function ClientSocialMediaPostingTrackerInterface() {
       return next;
     });
   const handleClientFormChange = (field, value) => setClientForm((prev) => ({ ...prev, [field]: value }));
+  const handleMetaAccountFormChange = (field, value) => setMetaAccountForm((prev) => ({ ...prev, [field]: value }));
+  const handleMetaConnectionFormChange = (field, value) => setMetaConnectionForm((prev) => ({ ...prev, [field]: value }));
+
+  function resetMetaAccountForm() {
+    setMetaAccountForm(EMPTY_META_ACCOUNT_FORM);
+    setEditingMetaAccountId(null);
+  }
+
+  function resetMetaConnectionForm() {
+    setMetaConnectionForm(EMPTY_META_CONNECTION_FORM);
+    setEditingMetaConnectionId(null);
+  }
+
+  async function resolveMetaSchemaVariant() {
+    if (!supabase) return META_SCHEMA_VARIANTS[0];
+    if (metaSchemaVariantId) {
+      return META_SCHEMA_VARIANTS.find((variant) => variant.id === metaSchemaVariantId) || META_SCHEMA_VARIANTS[0];
+    }
+
+    let lastError = null;
+    for (const variant of META_SCHEMA_VARIANTS) {
+      const { error } = await supabase.from(variant.accountsTable).select("*").limit(1);
+      if (!error) {
+        setMetaSchemaVariantId(variant.id);
+        return variant;
+      }
+      lastError = error;
+    }
+
+    throw lastError || new Error("Meta account tables are unavailable.");
+  }
 
   const togglePlanPlatform = (platform) => {
     setPlanForm((prev) => {
@@ -4042,6 +5020,10 @@ function ClientSocialMediaPostingTrackerInterface() {
 
   async function handlePlanSubmit(event) {
     event.preventDefault();
+    if (!canEdit(currentUser)) {
+      setNotice("Your role does not have permission to edit planned content.");
+      return;
+    }
     if (!planForm.clientName || !planForm.date || !planForm.topic || !planForm.platforms.length) return;
 
     const baseEntry = {
@@ -4133,6 +5115,10 @@ function ClientSocialMediaPostingTrackerInterface() {
   }
 
   function handleEditPlan(planId) {
+    if (!canEdit(currentUser)) {
+      setNotice("Your role does not have permission to edit planned content.");
+      return;
+    }
     const plan = plans.find((item) => item.id === planId);
     if (!plan) return;
     setPlanForm({
@@ -4150,6 +5136,10 @@ function ClientSocialMediaPostingTrackerInterface() {
   }
 
   async function handleDeletePlan(planId) {
+    if (!canEdit(currentUser)) {
+      setNotice("Your role does not have permission to delete planned content.");
+      return;
+    }
     const ok = typeof window === "undefined" ? true : window.confirm("Delete this planned entry?");
     if (!ok) return;
 
@@ -4158,6 +5148,12 @@ function ClientSocialMediaPostingTrackerInterface() {
       try {
         const { error } = await supabase.from("plans").delete().eq("id", planId);
         if (error) throw error;
+        setMetricReviewDrafts((prev) => {
+          if (!prev[planId]) return prev;
+          const next = { ...prev };
+          delete next[planId];
+          return next;
+        });
         if (editingPlanId === planId) {
           setEditingPlanId(null);
           resetPlanForm();
@@ -4176,6 +5172,12 @@ function ClientSocialMediaPostingTrackerInterface() {
     setPlans(deleted.plans);
     setStatusRecords(deleted.statusRecords);
     setStatusDrafts(deleted.statusDrafts);
+    setMetricReviewDrafts((prev) => {
+      if (!prev[planId]) return prev;
+      const next = { ...prev };
+      delete next[planId];
+      return next;
+    });
     setProtectedDraftEdits((prev) =>
       Object.fromEntries(
         Object.entries(prev).filter(([key]) => !key.startsWith(`${planId}:`))
@@ -4210,6 +5212,7 @@ function ClientSocialMediaPostingTrackerInterface() {
   }
 
   function updateProtectedDraft(row, field, value) {
+    const planKey = getPlanKey(row);
     const protectionKey = `${getPlanKey(row)}:${field}`;
     const alreadyUnlocked = protectedDraftEdits[protectionKey];
 
@@ -4226,10 +5229,170 @@ function ClientSocialMediaPostingTrackerInterface() {
       }));
     }
 
+    if (field === "postLink") {
+      setMetricReviewDrafts((prev) => {
+        if (!prev[planKey]) return prev;
+        const next = { ...prev };
+        delete next[planKey];
+        return next;
+      });
+    }
+
     updateDraft(row, field, value);
   }
 
+  async function handleFetchMetricReview(plan) {
+    if (!canEdit(currentUser)) {
+      setNotice("Your role does not have permission to fetch metrics for review.");
+      return;
+    }
+
+    const planKey = getPlanKey(plan);
+    const postLinkState = getPostLinkValidationState(plan.draftPostLink);
+
+    if (!postLinkState.hasValue) {
+      setMetricReviewDrafts((prev) => ({
+        ...prev,
+        [planKey]: createFailedMetricReview("Add a YouTube post link before fetching demo metrics.", {
+          errorCode: "missing_post_link",
+        }),
+      }));
+      setNotice("Add a YouTube post link before fetching demo metrics.");
+      return;
+    }
+
+    if (!postLinkState.isValid) {
+      setMetricReviewDrafts((prev) => ({
+        ...prev,
+        [planKey]: createFailedMetricReview(postLinkState.errorMessage || "This post link cannot be fetched yet.", {
+          errorCode: postLinkState.errorCode || "invalid_post_link",
+        }),
+      }));
+      setNotice(postLinkState.errorMessage || "This post link cannot be fetched yet.");
+      return;
+    }
+
+    if (postLinkState.platform !== "youtube") {
+      setMetricReviewDrafts((prev) => ({
+        ...prev,
+        [planKey]: createFailedMetricReview("Fetched metrics are available only for YouTube links in this phase. Manual metrics remain primary for other platforms.", {
+          errorCode: "demo_platform_not_supported",
+        }),
+      }));
+      setNotice("Fetched metrics are available only for YouTube links in this phase.");
+      return;
+    }
+
+    setMetricReviewDrafts((prev) => ({
+      ...prev,
+      [planKey]: createFetchingMetricReview(postLinkState),
+    }));
+
+    await new Promise((resolve) => {
+      if (typeof window === "undefined") {
+        resolve();
+        return;
+      }
+      window.setTimeout(resolve, 450);
+    });
+
+    const existingStatusRecord = statusRecords.find((item) => item.planId === plan.id);
+    const review = await fetchYouTubeMetricReview(postLinkState, {
+      socialPostId: postLinkState.providerPostId,
+      statusRecordId: existingStatusRecord?.id || null,
+      fetchedByProfileId: currentUser?.id || null,
+    });
+
+    setMetricReviewDrafts((prev) => ({
+      ...prev,
+      [planKey]: review,
+    }));
+    setNotice(
+      review.reviewState === REVIEW_WORKFLOW_STATES.FAILED
+        ? review.errorMessage || "Metric fetch failed."
+        : review.message || "Fetched metrics are ready for review."
+    );
+  }
+
+  function handleApproveMetricReview(plan) {
+    if (!canEdit(currentUser)) {
+      setNotice("Your role does not have permission to approve fetched metrics.");
+      return;
+    }
+
+    const planKey = getPlanKey(plan);
+    const review = metricReviewDrafts[planKey];
+
+    if (!review || review.reviewState !== REVIEW_WORKFLOW_STATES.FETCHED_DRAFT || !review.snapshot) {
+      setNotice("Fetch demo metrics first before approving.");
+      return;
+    }
+
+    const approvedDraftMetrics = getApprovedSavedMetricDraft(review);
+    const hasIncomingMetrics = Object.keys(approvedDraftMetrics).length > 0;
+
+    if (!hasIncomingMetrics) {
+      setNotice("This fetched draft has no mapped reporting metrics to approve yet.");
+      return;
+    }
+
+    const existingDraft = statusDrafts[planKey] || createStatusDraftSnapshot(plan);
+    const wouldOverwriteExistingMetrics = Object.keys(approvedDraftMetrics).some(
+      (field) => parseMetricValue(existingDraft[field]) !== null
+    );
+
+    if (
+      wouldOverwriteExistingMetrics &&
+      typeof window !== "undefined" &&
+      !window.confirm("Approving will copy fetched demo metrics into the editable draft fields. Reporting will not change until you save the update. Continue?")
+    ) {
+      return;
+    }
+
+    setStatusDrafts((prev) => ({
+      ...prev,
+      [planKey]: {
+        ...(prev[planKey] || createStatusDraftSnapshot(plan)),
+        ...approvedDraftMetrics,
+      },
+    }));
+    setMetricReviewDrafts((prev) => ({
+      ...prev,
+      [planKey]: approveMetricReview(review, {
+        approvedByProfileId: currentUser?.id || null,
+      }),
+    }));
+    setNotice("Fetched metrics approved and copied into the local draft fields. Save Update to use them in reporting.");
+  }
+
+  function handleRejectMetricReview(plan) {
+    if (!canEdit(currentUser)) {
+      setNotice("Your role does not have permission to reject fetched metrics.");
+      return;
+    }
+
+    const planKey = getPlanKey(plan);
+    const review = metricReviewDrafts[planKey];
+
+    if (!review || review.reviewState !== REVIEW_WORKFLOW_STATES.FETCHED_DRAFT || !review.snapshot) {
+      setNotice("Fetch demo metrics first before rejecting.");
+      return;
+    }
+
+    setMetricReviewDrafts((prev) => ({
+      ...prev,
+      [planKey]: rejectMetricReview(review, {
+        rejectedByProfileId: currentUser?.id || null,
+      }),
+    }));
+    setNotice("Fetched demo metrics rejected. Manual metrics remain the trusted reporting source.");
+  }
+
   async function saveDraftToStatusLog(plan) {
+    if (!canEdit(currentUser)) {
+      setNotice("Your role does not have permission to save status updates.");
+      return;
+    }
     const planKey = getPlanKey(plan);
     const draft = statusDrafts[planKey] || EMPTY_STATUS_DRAFT;
     const effectiveStatus = resolveStatusValue(draft.status, plan.currentStatus);
@@ -4247,22 +5410,37 @@ function ClientSocialMediaPostingTrackerInterface() {
       setBusy(true);
       try {
         const payload = toDbStatus(plan, normalizedDraft, currentUser.id);
-        const { data: existing, error: existingError } = await supabase
+        const updatePayload = toDbStatusUpdate(plan, normalizedDraft, currentUser.id);
+        const legacyPayload = Object.fromEntries(
+          Object.entries(payload).filter(([key]) => key !== "views")
+        );
+        const legacyUpdatePayload = Object.fromEntries(
+          Object.entries(updatePayload).filter(([key]) => key !== "views")
+        );
+        const { data: existingRows, error: existingError } = await supabase
           .from("status_records")
           .select("id")
-          .eq("plan_id", plan.id)
-          .maybeSingle();
+          .eq("plan_id", plan.id);
 
         if (existingError) throw existingError;
 
-        if (existing?.id) {
-          const { error } = await supabase
+        if (existingRows?.length) {
+          let { error } = await supabase
             .from("status_records")
-            .update({ ...payload, updated_by: currentUser.id })
-            .eq("id", existing.id);
+            .update(updatePayload)
+            .eq("plan_id", plan.id);
+          if (error && isMissingViewsColumnError(error)) {
+            ({ error } = await supabase
+              .from("status_records")
+              .update(legacyUpdatePayload)
+              .eq("plan_id", plan.id));
+          }
           if (error) throw error;
         } else {
-          const { error } = await supabase.from("status_records").insert(payload);
+          let { error } = await supabase.from("status_records").insert(payload);
+          if (error && isMissingViewsColumnError(error)) {
+            ({ error } = await supabase.from("status_records").insert(legacyPayload));
+          }
           if (error) throw error;
         }
 
@@ -4300,6 +5478,7 @@ function ClientSocialMediaPostingTrackerInterface() {
       qualitativeNotes: normalizedDraft.qualitativeNotes?.trim() || "",
       reach: parseMetricValue(normalizedDraft.reach),
       impressions: parseMetricValue(normalizedDraft.impressions),
+      views: parseMetricValue(normalizedDraft.views),
       likes: parseMetricValue(normalizedDraft.likes),
       comments: parseMetricValue(normalizedDraft.comments),
       shares: parseMetricValue(normalizedDraft.shares),
@@ -4339,6 +5518,7 @@ function ClientSocialMediaPostingTrackerInterface() {
       setPlans(nextPlans);
       setStatusRecords(nextStatuses);
       setStatusDrafts({});
+      setMetricReviewDrafts({});
       setProtectedDraftEdits({});
       setEditingPlanId(null);
       resetPlanForm();
@@ -4355,6 +5535,7 @@ function ClientSocialMediaPostingTrackerInterface() {
     setPlans(DEFAULT_PLANS.map(withPlanId));
     setStatusRecords(DEFAULT_STATUS_RECORDS.map(withStatusId));
     setStatusDrafts({});
+    setMetricReviewDrafts({});
     setProtectedDraftEdits({});
     setEditingPlanId(null);
     resetPlanForm();
@@ -4472,7 +5653,7 @@ function ClientSocialMediaPostingTrackerInterface() {
     setBusy(true);
     try {
       const config = getTrackerConfig();
-      const emailRedirectTo = config?.appUrl || window.location.href;
+      const emailRedirectTo = getMagicLinkRedirectUrl(config);
       const { error } = await supabase.auth.signInWithOtp({
         email: authEmail.trim(),
         options: {
@@ -4575,6 +5756,10 @@ function ClientSocialMediaPostingTrackerInterface() {
 
   async function handleClientSubmit(event) {
     event.preventDefault();
+    if (!canEdit(currentUser)) {
+      setNotice("Your role does not have permission to manage client brands.");
+      return;
+    }
     const name = clientForm.name.trim();
     const notes = clientForm.notes.trim();
     if (!name) {
@@ -4617,6 +5802,10 @@ function ClientSocialMediaPostingTrackerInterface() {
   }
 
   async function handleClientDelete(client) {
+    if (!canEdit(currentUser)) {
+      setNotice("Your role does not have permission to manage client brands.");
+      return;
+    }
     const ok = typeof window === "undefined" ? true : window.confirm(`Remove client ${client.name}?`);
     if (!ok) return;
 
@@ -4647,16 +5836,207 @@ function ClientSocialMediaPostingTrackerInterface() {
     setNotice(`Client removed: ${client.name}.`);
   }
 
+  function handleMetaAccountEdit(account) {
+    if (!isAdmin(currentUser)) return;
+    setEditingMetaAccountId(account.id || null);
+    setMetaAccountForm({
+      platform: normalizeMetaAccountPlatform(account.platform),
+      displayName: account.displayName || "",
+      externalAccountId: account.externalAccountId || "",
+      username: account.username || "",
+      connectionStatus: account.connectionStatus || "active",
+    });
+    setNotice(`Editing Meta account ${account.displayName || "record"}.`);
+  }
+
+  function handleMetaConnectionEdit(connection) {
+    if (!isAdmin(currentUser)) return;
+    setEditingMetaConnectionId(connection.id || null);
+    setMetaConnectionForm({
+      accountId: connection.accountId || "",
+      clientId: connection.clientId || "",
+      connectionStatus: connection.connectionStatus || "active",
+    });
+    setNotice(`Editing Meta mapping for ${connection.clientName || "selected brand"}.`);
+  }
+
+  async function handleMetaAccountSubmit(event) {
+    event.preventDefault();
+    if (!isAdmin(currentUser)) {
+      setNotice("Your role does not have permission to manage Meta accounts.");
+      return;
+    }
+
+    const displayName = metaAccountForm.displayName.trim();
+    const externalAccountId = metaAccountForm.externalAccountId.trim();
+    if (!displayName || !externalAccountId) {
+      setNotice("Add a Meta display name and external account ID before saving.");
+      return;
+    }
+
+    if (sharedModeReady && currentUser?.mode === "shared" && supabase) {
+      setMetaBusy(true);
+      try {
+        const variant = await resolveMetaSchemaVariant();
+        const payload = buildMetaAccountPayload(variant.id, metaAccountForm, currentUser.id);
+        if (editingMetaAccountId) payload.id = editingMetaAccountId;
+        const { error } = await supabase.from(variant.accountsTable).upsert(payload);
+        if (error) throw error;
+        resetMetaAccountForm();
+        setNotice(`Meta account saved: ${displayName}.`);
+        await loadRemoteData(currentUser);
+      } catch (error) {
+        setNotice(error.message || "Unable to save the Meta account.");
+      } finally {
+        setMetaBusy(false);
+      }
+      return;
+    }
+
+    setMetaAccounts((prev) => {
+      const nextItem = {
+        id: editingMetaAccountId || createId("meta-account"),
+        platform: normalizeMetaAccountPlatform(metaAccountForm.platform),
+        displayName,
+        externalAccountId,
+        username: metaAccountForm.username.trim(),
+        connectionStatus: metaAccountForm.connectionStatus,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const withoutMatch = prev.filter((item) => item.id !== editingMetaAccountId);
+      return [...withoutMatch, nextItem].sort((a, b) => a.displayName.localeCompare(b.displayName));
+    });
+    resetMetaAccountForm();
+    setNotice(`Meta account saved: ${displayName}.`);
+  }
+
+  async function handleMetaConnectionSubmit(event) {
+    event.preventDefault();
+    if (!isAdmin(currentUser)) {
+      setNotice("Your role does not have permission to manage Meta connections.");
+      return;
+    }
+
+    if (!metaConnectionForm.accountId || !metaConnectionForm.clientId) {
+      setNotice("Select both a Meta account and a client brand before saving the mapping.");
+      return;
+    }
+
+    const selectedClient = visibleManagedClients.find((client) => client.id === metaConnectionForm.clientId) || null;
+    const selectedAccount = metaAccounts.find((account) => account.id === metaConnectionForm.accountId) || null;
+
+    if (sharedModeReady && currentUser?.mode === "shared" && supabase) {
+      setMetaBusy(true);
+      try {
+        const variant = await resolveMetaSchemaVariant();
+        const payload = buildMetaConnectionPayload(variant.id, metaConnectionForm, currentUser.id);
+        if (editingMetaConnectionId) payload.id = editingMetaConnectionId;
+        const { error } = await supabase.from(variant.connectionsTable).upsert(payload);
+        if (error) throw error;
+        resetMetaConnectionForm();
+        setNotice(`Meta mapping saved for ${selectedClient?.name || "selected brand"}.`);
+        await loadRemoteData(currentUser);
+      } catch (error) {
+        setNotice(error.message || "Unable to save the Meta mapping.");
+      } finally {
+        setMetaBusy(false);
+      }
+      return;
+    }
+
+    setMetaConnections((prev) => {
+      const nextItem = {
+        id: editingMetaConnectionId || createId("meta-connection"),
+        accountId: metaConnectionForm.accountId,
+        clientId: metaConnectionForm.clientId,
+        clientName: selectedClient?.name || "",
+        connectionStatus: metaConnectionForm.connectionStatus,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const withoutMatch = prev.filter((item) => item.id !== editingMetaConnectionId);
+      return [...withoutMatch, nextItem];
+    });
+    resetMetaConnectionForm();
+    setNotice(`Meta mapping saved for ${selectedClient?.name || selectedAccount?.displayName || "selected brand"}.`);
+  }
+
+  async function handleMetaConnectionDisable(connection) {
+    if (!isAdmin(currentUser)) {
+      setNotice("Your role does not have permission to manage Meta connections.");
+      return;
+    }
+
+    if (sharedModeReady && currentUser?.mode === "shared" && supabase) {
+      setMetaBusy(true);
+      try {
+        const variant = await resolveMetaSchemaVariant();
+        const payload = buildMetaConnectionDisablePayload(variant.id, currentUser.id);
+        const { error } = await supabase.from(variant.connectionsTable).update(payload).eq("id", connection.id);
+        if (error) throw error;
+        setNotice(`Meta mapping disabled for ${connection.clientName || "selected brand"}.`);
+        await loadRemoteData(currentUser);
+      } catch (error) {
+        setNotice(error.message || "Unable to disable the Meta mapping.");
+      } finally {
+        setMetaBusy(false);
+      }
+      return;
+    }
+
+    setMetaConnections((prev) => prev.map((item) => item.id === connection.id ? { ...item, connectionStatus: "disabled", deactivatedAt: new Date().toISOString() } : item));
+    setNotice(`Meta mapping disabled for ${connection.clientName || "selected brand"}.`);
+  }
+
+  async function handleMetaConnectionDelete(connection) {
+    if (!isAdmin(currentUser)) {
+      setNotice("Your role does not have permission to manage Meta connections.");
+      return;
+    }
+    const ok = typeof window === "undefined" ? true : window.confirm(`Remove the Meta mapping for ${connection.clientName || "this brand"}?`);
+    if (!ok) return;
+
+    if (sharedModeReady && currentUser?.mode === "shared" && supabase) {
+      setMetaBusy(true);
+      try {
+        const variant = await resolveMetaSchemaVariant();
+        const { error } = await supabase.from(variant.connectionsTable).delete().eq("id", connection.id);
+        if (error) throw error;
+        if (editingMetaConnectionId === connection.id) {
+          resetMetaConnectionForm();
+        }
+        setNotice(`Meta mapping removed for ${connection.clientName || "selected brand"}.`);
+        await loadRemoteData(currentUser);
+      } catch (error) {
+        setNotice(error.message || "Unable to remove the Meta mapping.");
+      } finally {
+        setMetaBusy(false);
+      }
+      return;
+    }
+
+    setMetaConnections((prev) => prev.filter((item) => item.id !== connection.id));
+    if (editingMetaConnectionId === connection.id) {
+      resetMetaConnectionForm();
+    }
+    setNotice(`Meta mapping removed for ${connection.clientName || "selected brand"}.`);
+  }
+
   async function handleLogout() {
     if (sharedModeReady && supabase && currentUser?.mode === "shared") {
       await supabase.auth.signOut();
       setCurrentUser(null);
       setPlans([]);
       setStatusRecords([]);
+      setMetaAccounts([]);
+      setMetaConnections([]);
       setStatusDrafts({});
+      setMetricReviewDrafts({});
       setProtectedDraftEdits({});
       setReportingMonthPinned(false);
       setActiveDataMonth(getMonthStart(new Date()));
+      setCalendarMonth(getMonthStart(new Date()));
       setSelectedClientName("All Clients");
       setIsClientView(false);
       setSelectedCalendarPost(null);
@@ -4667,9 +6047,14 @@ function ClientSocialMediaPostingTrackerInterface() {
 
     setCurrentUser(null);
     setIsClientView(false);
+    setMetaAccounts([]);
+    setMetaConnections([]);
+    setStatusDrafts({});
+    setMetricReviewDrafts({});
     setProtectedDraftEdits({});
     setReportingMonthPinned(false);
     setActiveDataMonth(getMonthStart(new Date()));
+    setCalendarMonth(getMonthStart(new Date()));
     setSelectedClientName("All Clients");
     setSelectedCalendarPost(null);
     setSelectedCalendarOverflow(null);
@@ -4681,14 +6066,20 @@ function ClientSocialMediaPostingTrackerInterface() {
       <LoginScreen
         users={DEMO_USERS}
         onLogin={(user) => {
+          if (!hasValidClientScope(user)) {
+            setNotice("This client account is missing a brand scope.");
+            return;
+          }
           setCurrentUser(user);
           setIsClientView(user.role === "client");
           setSelectedClientName(user.role === "client" ? user.clientName : "All Clients");
           setReportingMonthPinned(false);
           setActiveDataMonth(getMonthStart(new Date()));
+          setCalendarMonth(getMonthStart(new Date()));
           setNotice(`${user.name} signed in.`);
         }}
         sharedMode={sharedModeReady}
+        setupNotice={!sharedModeReady ? trackerConfigNotice : ""}
         authEmail={authEmail}
         onAuthEmailChange={setAuthEmail}
         onRequestMagicLink={requestMagicLink}
@@ -4757,7 +6148,7 @@ function ClientSocialMediaPostingTrackerInterface() {
             </button>
           </div>
         )}
-        {!sharedModeReady && <SharedSetupPanel />}
+        {!sharedModeReady && <SharedSetupPanel message={trackerConfigNotice} />}
 
         <div className="space-y-6">
           {!isClientView && canEdit(currentUser) && adminWorkspace === "planning" && (
@@ -4934,6 +6325,10 @@ function ClientSocialMediaPostingTrackerInterface() {
                   }}
                   onDraftChange={updateDraft}
                   onProtectedDraftChange={updateProtectedDraft}
+                  metricReviewDrafts={metricReviewDrafts}
+                  onFetchMetricReview={handleFetchMetricReview}
+                  onApproveMetricReview={handleApproveMetricReview}
+                  onRejectMetricReview={handleRejectMetricReview}
                   onSaveUpdate={saveDraftToStatusLog}
                   onEdit={handleEditPlan}
                   onDelete={handleDeletePlan}
@@ -5061,6 +6456,29 @@ function ClientSocialMediaPostingTrackerInterface() {
                     clientOptions={directoryClientNames}
                   />
                 )}
+                {currentUser.role !== "client" && (
+                  <MetaConnectionsPanel
+                    currentUser={currentUser}
+                    metaAccounts={metaAccounts}
+                    metaConnections={enrichedMetaConnections}
+                    clients={visibleManagedClients}
+                    metaAccountForm={metaAccountForm}
+                    metaConnectionForm={metaConnectionForm}
+                    editingMetaAccountId={editingMetaAccountId}
+                    editingMetaConnectionId={editingMetaConnectionId}
+                    metaBusy={metaBusy}
+                    onMetaAccountFormChange={handleMetaAccountFormChange}
+                    onMetaConnectionFormChange={handleMetaConnectionFormChange}
+                    onMetaAccountSubmit={handleMetaAccountSubmit}
+                    onMetaConnectionSubmit={handleMetaConnectionSubmit}
+                    onMetaAccountEdit={handleMetaAccountEdit}
+                    onMetaConnectionEdit={handleMetaConnectionEdit}
+                    onMetaConnectionDisable={handleMetaConnectionDisable}
+                    onMetaConnectionDelete={handleMetaConnectionDelete}
+                    onMetaAccountCancel={resetMetaAccountForm}
+                    onMetaConnectionCancel={resetMetaConnectionForm}
+                  />
+                )}
                 <DeploymentTools
                   onExport={handleExportBackup}
                   onImport={handleImportBackup}
@@ -5127,6 +6545,3 @@ function ClientSocialMediaPostingTrackerInterface() {
     </div>
   );
 }
-
-
-ReactDOM.createRoot(document.getElementById("root")).render(<ClientSocialMediaPostingTrackerInterface />);
