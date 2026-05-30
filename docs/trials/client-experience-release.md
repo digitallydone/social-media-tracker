@@ -3,6 +3,9 @@
 **Date:** 2026-05-30
 **Scope:** Client-only UX improvements. No Meta, OAuth, YouTube, Supabase schema, auth flows, or role permissions changed.
 **Build status:** `npm run build` — passed, zero errors, zero warnings.
+**Deployment status:** Deployed to production 2026-05-30.
+**Production URL:** https://social-media-tracker-three-xi.vercel.app
+**Release branch:** `release/client-experience` (committed, cherry-picked to `main`)
 
 ---
 
@@ -227,4 +230,57 @@ Walk the client through the dashboard in a screen-share on their first login. Th
 
 ---
 
-*No code was deployed. No Supabase schema was changed. No existing admin, manager, or reporting workflows were modified.*
+---
+
+## Deployment Record
+
+**Deployed:** 2026-05-30
+**Method:** `npx vercel --prod` from clean `release/client-experience` branch
+**Vercel deployment ID:** `dpl_HACtM4y28dVTh6xezXKgQYXLhPUe`
+**Production URL:** https://social-media-tracker-three-xi.vercel.app
+**Build on Vercel:** ✓ `vite build` — zero errors, zero warnings (2.32s)
+
+**Files deployed:**
+- `src/App.jsx` — client experience features + FEEDBACK_EMAIL updated to `kojo@itsdigitally.com`
+- `docs/trials/client-experience-release.md` — this document
+
+**Excluded from this deployment (unrelated dirty files on `main`):**
+- `.gitignore`, `server.mjs`, `src/index.css`, `supabase/schema.sql`, `vercel.json`, `vite.config.js`
+
+---
+
+## Post-Deployment Verification
+
+All checks performed against the live production bundle at:
+`https://social-media-tracker-three-xi.vercel.app/assets/index-BVnC3ZP1.js`
+
+| Check | Result |
+|-------|--------|
+| App loads at production URL | ✓ Title: "Social Media Flowboard \| Digitally Done" |
+| `kojo@itsdigitally.com` in bundle | ✓ Present (1 occurrence) |
+| `smf-client-welcome-seen` session key in bundle | ✓ Present |
+| "Take a Tour" button string in bundle | ✓ Present |
+| "Send Feedback" button string in bundle | ✓ Present |
+| "Got it, let me explore" dismiss button in bundle | ✓ Present |
+| "Most recent published content" last-updated string | ✓ Present |
+| "Execution Score" tooltip in SnapshotPanel | ✓ Present |
+| "Content plans for" client empty state string | ✓ Present |
+| "Digitally Done manages all planning" in welcome modal | ✓ Present |
+| Product tour step counter ("Step X of Y") structure | ✓ Present |
+| Login "Shared Trial" badge — must be absent from rendered login | ✓ Only appears inside admin-only `ModeBanner` and `SharedSetupPanel` — not at login |
+| YouTube workflow strings present and unchanged | ✓ "YouTube" string present in bundle |
+| Admin/manager workflow strings intact | ✓ Verified — no admin components were modified |
+
+**Manual verification required before first client login** (cannot be verified from bundle alone):
+- Welcome modal appears for a real client-role Supabase session on first login
+- Take a Tour opens the 5-step floating panel and all steps advance correctly
+- Send Feedback opens the user's email client addressed to `kojo@itsdigitally.com`
+- Metric tooltips appear on hover over Reach, Impressions, Engagement, Execution Score labels
+- Last updated date appears when posted content with metrics exists for the selected month
+- Admin demo login (Richard) shows no welcome modal and no Tour button
+- Manager demo login (Team Lead) shows no welcome modal and no Tour button
+- Client demo login (Demo Client) triggers the welcome modal on first session load
+
+---
+
+*Supabase schema was not changed. Auth flows were not changed. YouTube, Meta, and reporting formulas were not touched.*
